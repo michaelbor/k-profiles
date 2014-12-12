@@ -91,6 +91,13 @@ struct vertex_data_type {
   size_t num_disc;
   size_t num_empty;
   
+  vertex_data_type& operator+=(const vertex_data_type& other) {
+    num_triangles += other.num_triangles;
+    num_wedges += other.num_wedges;
+    num_disc += other.num_disc;
+		num_empty += other.num_empty;
+    return *this;
+  }
   //add to these??
   void save(graphlab::oarchive &oarc) const {
     //oarc << vid_set << num_triangles;
@@ -159,7 +166,7 @@ struct set_edge_sum_gather {
 // To collect the set of neighbors, we need a message type which is
 // basically a set of vertex IDs
 
-bool PER_VERTEX_COUNT = false;
+bool PER_VERTEX_COUNT = true;//false;
 size_t NUM_VERTICES = 0;
 
 
@@ -495,6 +502,9 @@ int main(int argc, char** argv) {
             true, /* save vertex */
             false, /* do not save edge */
             1); /* one file per machine */
+
+    vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
+    dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges << "  " << global_counts.num_disc << "  " << global_counts.num_empty << "  " << std::endl;
 
   }
   
