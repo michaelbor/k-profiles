@@ -220,6 +220,7 @@ public:
   // Gather on all edges
   edge_dir_type gather_edges(icontext_type& context,
                              const vertex_type& vertex) const {
+    //sample edges here eventually, maybe by random edge.id() so consistent between the 2 engines?
     return graphlab::ALL_EDGES;
   } 
 
@@ -383,11 +384,13 @@ public:
 // }
 
 vertex_data_type get_vertex_data(const graph_type::vertex_type& v) {
+  //denom = (v)*(v-1)*(v-2)(v-3)/24.; //divide by |V| choose 4, do this here?
+  //denom = 1;
   // vertex_data_type finalout;
-  // finalout.data().num_triangles = v.data().num_triangles/3;
-  // finalout.data().num_wedges = v.data().num_wedges/3;
-  // finalout.data().num_disc = v.data().num_disc/2;
-  // finalout.data().num_empty = v.data().num_empty/3;
+  // finalout.data().num_triangles = v.data().num_triangles/(3*denom);
+  // finalout.data().num_wedges = v.data().num_wedges/(3*denom);
+  // finalout.data().num_disc = v.data().num_disc/(2*denom);
+  // finalout.data().num_empty = v.data().num_empty/(3*denom);
   return v.data();
 }
 
@@ -476,6 +479,7 @@ int main(int argc, char** argv) {
     // dc.cout() << count << " Triangles"  << std::endl;
     //fix if only global count
     dc.cout() << "Global is not currently supported"  << std::endl;
+    //print counts and normalized?
     // // boost::vector<size_t,4> global_counts = graph.map_reduce_vertices< boost::vector<size_t,4> >(get_vertex_data);
     // vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
     // dc.cout() << "Global count: " << global_counts.data().num_triangles << "  " << global_counts.data().num_wedges << 
