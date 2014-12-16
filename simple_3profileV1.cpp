@@ -81,9 +81,9 @@
  */
 struct vertex_data_type {
   //this constructor ruins the global count!
-  //vertex_data_type():num_triangles(0), num_wedges(0), num_disc(0), num_empty(0) { }
+  //vertex_data_type():{num_triangles = 0; num_wedges = 0; num_disc = 0; num_empty = 0;}
   //removing constructor also ruins global count, the line below only ruins global triangle count
-  vertex_data_type():num_wedges(0) { }
+  //vertex_data_type():num_wedges(0) { }
   // A list of all its neighbors
   boost::unordered_set<graphlab::vertex_id_type> vid_set;
   // The number of triangles this vertex is involved it.
@@ -93,6 +93,8 @@ struct vertex_data_type {
   size_t num_disc;
   size_t num_empty;
   
+//vertex_data_type(){num_triangles = 0; num_wedges = 0; num_disc = 0; num_empty = 0;}
+
   vertex_data_type& operator+=(const vertex_data_type& other) {
     num_triangles += other.num_triangles;
     num_wedges += other.num_wedges;
@@ -212,6 +214,17 @@ struct set_union_gather {
  */
 typedef graphlab::distributed_graph<vertex_data_type,
                                     edge_data_type> graph_type;
+
+
+void init_vertex(graph_type::vertex_type& vertex) { 
+
+
+	vertex.data().num_triangles = 0; 
+	vertex.data().num_wedges = 0; 
+	vertex.data().num_disc = 0; 
+	vertex.data().num_empty = 0;
+
+}
 
 
 /*
@@ -367,7 +380,8 @@ public:
     vertex.data().num_triangles = ecounts.n3 / 2;
     vertex.data().num_wedges = ecounts.n2 - pow(vertex.data().vid_set.size(),2)/2 + 
         vertex.data().num_triangles;
-    vertex.data().num_disc = ecounts.n1;
+    vertex.data().num_disc = ecounts.n1 + context.num_edges() - 3*vertex.data().num_triangles - 2*vertex.data().num_wedges;
+    //vertex.data().num_disc = ecounts.n1 + context.num_edges() - 1.5*ecounts.n3 - ecounts.n;
     //how do I get graph.num_vertices() here?? NUM_VERTICES?
     vertex.data().num_empty = (NUM_VERTICES  - 1)*(NUM_VERTICES - 2)/2 - 
         (vertex.data().num_triangles + vertex.data().num_wedges + vertex.data().num_disc);
@@ -477,6 +491,9 @@ int main(int argc, char** argv) {
   NUM_VERTICES = graph.num_vertices();
   graphlab::timer ti;
   
+ // Initialize the vertex data
+  graph.transform_vertices(init_vertex);
+
   // create engine to count the number of triangles
   dc.cout() << "Counting Triangles..." << std::endl;
   graphlab::synchronous_engine<triangle_count> engine(dc, graph, clopts);
@@ -485,22 +502,32 @@ int main(int argc, char** argv) {
 
   dc.cout() << "Counted in " << ti.current_time() << " seconds" << std::endl;
 
-  if (PER_VERTEX_COUNT == false) {
+  if (PER_VERTEX_COUNT == true) {
     // size_t count = graph.map_reduce_edges<size_t>(get_edge_data);
     // dc.cout() << count << " Triangles"  << std::endl;
     //fix if only global count
     //dc.cout() << "Global is not currently supported"  << std::endl;
+	graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
+    	engine.signal_all();
+    	engine.start();
+
 	vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
     size_t denom = (NUM_VERTICES)*(NUM_VERTICES-1)*(NUM_VERTICES-2)*(NUM_VERTICES-3)/24.; //normalize by |V| choose 4
 	//size_t denom = 1;
 	dc.cout() << "denominator: " << denom << std::endl;
-	dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/2 << "  " << global_counts.num_empty/3 << "  " << std::endl;
-	dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*2.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
+	dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
+	dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
     //print counts and normalized?
     // // boost::vector<size_t,4> global_counts = graph.map_reduce_vertices< boost::vector<size_t,4> >(get_vertex_data);
     // vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
     // dc.cout() << "Global count: " << global_counts.data().num_triangles << "  " << global_counts.data().num_wedges << 
     //   "  " << global_counts.data().num_disc << "  " << global_counts.data().num_empty << "  " << std::endl;
+	 graph.save(per_vertex,
+            save_triangle_count(),
+            false, /* no compression */
+            true, /* save vertex */
+            false, /* do not save edge */
+            1); /* one file per machine */
   }
   else {
     graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
