@@ -171,7 +171,7 @@ struct set_edge_sum_gather {
 // basically a set of vertex IDs
 
 bool PER_VERTEX_COUNT = false;
-size_t NUM_VERTICES = 0;
+//size_t NUM_VERTICES = 0;
 
 
 /*
@@ -320,7 +320,7 @@ public:
     tmp2 = srclist.vid_set.size() + targetlist.vid_set.size();
     edge.data().n3 = tmp;
     edge.data().n2 =  tmp2 - 2*tmp;
-    edge.data().n1 = NUM_VERTICES - (tmp2 - tmp);
+    edge.data().n1 = context.num_vertices() - (tmp2 - tmp);
   }
 };
 
@@ -377,15 +377,19 @@ public:
   void apply(icontext_type& context, vertex_type& vertex,
              const gather_type& ecounts) { //edge_data_type??
     //no longer a gether_type& ??
+    //NEED EXTRA MINUS 1 TO ACCOUNT FOR THE PIVOT EDGE
+    //small examples work, global count is still off by 1 on real graphs
     vertex.data().num_triangles = ecounts.n3 / 2;
-    vertex.data().num_wedges = ecounts.n2 - pow(vertex.data().vid_set.size(),2)/2 + 
+    // vertex.data().num_wedges = ecounts.n2 - pow(vertex.data().vid_set.size(),2)/2 + 
+        // vertex.data().num_triangles;
+    vertex.data().num_wedges = ecounts.n2 - ( pow(vertex.data().vid_set.size(),2) + 3*vertex.data().vid_set.size() )/2 +
         vertex.data().num_triangles;
-    vertex.data().num_disc = ecounts.n1 + context.num_edges() - 3*vertex.data().num_triangles - 2*vertex.data().num_wedges;
+    //vertex.data().num_disc = ecounts.n1 + context.num_edges() - 3*vertex.data().num_triangles - 2*vertex.data().num_wedges;
+    vertex.data().num_disc = ecounts.n1 + context.num_edges() - 3*vertex.data().num_triangles + pow(vertex.data().vid_set.size(),2) - ecounts.n2; //works for small example
     //vertex.data().num_disc = ecounts.n1 + context.num_edges() - 1.5*ecounts.n3 - ecounts.n;
-    //how do I get graph.num_vertices() here?? NUM_VERTICES?
-    vertex.data().num_empty = (NUM_VERTICES  - 1)*(NUM_VERTICES - 2)/2 - 
+    vertex.data().num_empty = (context.num_vertices()  - 1)*(context.num_vertices() - 2)/2 - 
         (vertex.data().num_triangles + vertex.data().num_wedges + vertex.data().num_disc);
-    //vertex.data().num_empty = (NUM_VERTICES  - 1)*(NUM_VERTICES - 2)/2 - 
+    //vertex.data().num_empty = (context.num_vertices()  - 1)*(context.num_vertices() - 2)/2 - 
     //    (ecounts.n1 + ecounts.n2 + ecounts.n3);
   }
 
@@ -488,7 +492,7 @@ int main(int argc, char** argv) {
             << "Number of edges:    " << graph.num_edges() << std::endl;
 
   //can engine see this now?
-  NUM_VERTICES = graph.num_vertices();
+  //NUM_VERTICES = graph.num_vertices();
   graphlab::timer ti;
   
  // Initialize the vertex data
@@ -512,7 +516,7 @@ int main(int argc, char** argv) {
     	engine.start();
 
 	vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
-    size_t denom = (NUM_VERTICES)*(NUM_VERTICES-1)*(NUM_VERTICES-2)*(NUM_VERTICES-3)/24.; //normalize by |V| choose 4
+  size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
 	//size_t denom = 1;
 	dc.cout() << "denominator: " << denom << std::endl;
 	dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
