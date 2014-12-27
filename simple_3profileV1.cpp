@@ -344,8 +344,8 @@ public:
     return graphlab::ALL_EDGES;
   }
   // We gather the number of triangles each edge is involved in
-  gather_type gather(icontext_type& context,
   //size_t gather(icontext_type& context,
+  gather_type gather(icontext_type& context,
                      const vertex_type& vertex,
                      edge_type& edge) const {
     //return edge.data();
