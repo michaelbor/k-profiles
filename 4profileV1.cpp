@@ -323,7 +323,80 @@ static size_t count_set_intersect(
 
 
 
+// //lightweight vector with inner product and addition operators, or use template? or overload?
+// //typedef size_t[USIZE] uvec;
+// typedef size_t uvec[USIZE];
+// //typedef struct uvec { size_t x[USIZE]; } uvec;
 
+// //template <class T> //template, but only needed for size_t[USIZE]
+// //inline T operator*(const T& a, const T& b)
+// //size_t operator*(const uvec& a, const uvec& b)
+// size_t uvecIP(const uvec& a, const uvec& b)
+// {
+//     //assert(a.size() == b.size()); //???
+//     //T sum = 0;
+//     size_t sum = 0;
+//     //for (size_t i = 0; i < a.size(); ++i)
+//     for (size_t i = 0; i < USIZE; ++i)
+//         sum += a[i]*b[i];
+//     return sum;
+// }
+
+// // element-wise sum
+// //template <class T>
+// //inline std::vector<T>& operator+(const std::vector<T>& a, const std::vector<T>& b)
+// //inline T& operator+=(const T& a, const T& b)
+// uvec& operator+=(const uvec& b)
+// //uvec& uvecACCUM(uvec& a, const uvec& b)
+// {
+//     //assert(a.size() == b.size());
+//     // uvec sum = {};
+//     for (int i = 0; i < USIZE; ++i)
+//         // sum[i] = a[i]+b[i];
+//       value[i] += b[i];
+//     //return sum;
+//     return a;
+// }
+
+
+//class instead??
+class uvec {
+private:
+  size_t value[USIZE];
+public:
+
+  size_t& operator[](int i){
+    if( i > USIZE ){
+      std::cout << "Index out of bounds" <<std::endl; 
+      // return first element.
+      return value[0];
+    }
+    return value[i];
+  }
+  const size_t& operator[](int i) const {
+    if( i > USIZE ){
+      std::cout << "Index out of bounds" <<std::endl; 
+      // return first element.
+      return value[0];
+    }
+    return value[i];
+  }
+  size_t operator*(const uvec& b) {
+    size_t sum = 0;
+    for (int i = 0; i < USIZE; ++i){
+      sum += value[i]*b.value[i];
+    }
+    return sum;
+  }
+
+  uvec& operator+=(const uvec& b){
+    for (int i = 0; i < USIZE; ++i){
+      value[i] += b.value[i];
+    }
+    return *this;
+  }
+
+};
 
 
 /*
@@ -334,15 +407,16 @@ struct vertex_data_type {
   //vertex_data_type(): num_triangles(0){ }
   // A list of all its neighbors
   vid_vector vid_set;
-  // The number of triangles this vertex is involved it.
-  // only used if "per vertex counting" is used
+  //comment out remove these 4 variables since we dont take local counts??
   size_t num_triangles;
   size_t num_wedges;
   size_t num_disc;
   size_t num_empty;
   // std::vector< size_t > u(USIZE);
   // Eigen::VectorXd<size_t> u(USIZE);
-  size_t u[USIZE]; //problems saving and loading?
+  // size_t u[USIZE]; //problems saving and loading?
+  //vector of counts accumulated for global system of equations
+  uvec u;
   // size_t u1;
   // size_t u2;
   // size_t u3;
@@ -353,6 +427,9 @@ struct vertex_data_type {
     num_disc += other.num_disc;
     num_empty += other.num_empty;
     //for int i = 0; i < USIZE; i++ {u[i] += other.u[i]}
+    u += other.u;
+    // u += &other.u;
+    //u = uvecACCUM(u,other.u)
     return *this;
   }
   
@@ -383,13 +460,14 @@ struct edge_data_type {
   size_t n3sq;
   size_t n3;
   size_t n2;
+  size_t n1sq;
   size_t n1;
   void save(graphlab::oarchive &oarc) const {
     //oarc << vid_set << num_triangles;
-    oarc << n1 << n2 << n3 << n3sq << n4;
+    oarc << n1 << n1sq << n2 << n3 << n3sq << n4;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> n1 >> n2 >> n3 >> n3sq >> n4;
+    iarc >> n1 >> n1sq >> n2 >> n3 >> n3sq >> n4;
   }
 };
 
@@ -398,24 +476,26 @@ struct edge_sum_gather {
   size_t n3sq;
   size_t n3;
   size_t n2;
+  size_t n1sq;
   size_t n1;
   edge_sum_gather& operator+=(const edge_sum_gather& other) {
     n4 += other.n4;
     n3sq += other.n3sq;
     n3 += other.n3;
     n2 += other.n2;
+    n1sq += other.n1sq;
     n1 += other.n1;
     return *this;
   }
 
   // serialize
   void save(graphlab::oarchive& oarc) const {
-    oarc << n1 << n2 << n3 << n3sq << n4;
+    oarc << n1 << n1sq << n2 << n3 << n3sq << n4;
   }
 
   // deserialize
   void load(graphlab::iarchive& iarc) {
-    iarc >> n1 >> n2 >> n3 >> n3sq >> n4;
+    iarc >> n1 >> n1sq >> n2 >> n3 >> n3sq >> n4;
   }
 };
 
@@ -614,6 +694,7 @@ public:
     edge.data().n3sq = pow(tmp,2);
     edge.data().n2 =  tmp2 - 2*tmp;
     edge.data().n1 = context.num_vertices() - (tmp2 - tmp);
+    edge.data().n1sq = pow(edge.data().n1,2);
     edge.data().n4 = tmp2*tmp;
   }
 };
@@ -644,6 +725,7 @@ public:
     edge_sum_gather gather;
     //more complex than just assignment?
     gather.n1 = edge.data().n1;
+    gather.n1sq = edge.data().n1sq;
     gather.n2 = edge.data().n2;
     gather.n3 = edge.data().n3;
     gather.n3sq = edge.data().n3sq;
@@ -659,17 +741,29 @@ public:
              const gather_type& ecounts) {
     //vertex.data().num_triangles = num_triangles / 2;
     //vid_set.size() or vid_vec.size()
-    vertex.data().num_triangles = ecounts.n3 / 2;
-    vertex.data().num_wedges = ecounts.n2 - ( pow(vertex.data().vid_set.size(),2) + 3*vertex.data().vid_set.size() )/2 +
-        vertex.data().num_triangles;
-    vertex.data().num_disc = ecounts.n1 + context.num_edges() - 3*vertex.data().num_triangles + pow(vertex.data().vid_set.size(),2) - ecounts.n2; //works for small example?????
-    vertex.data().num_empty = (context.num_vertices()  - 1)*(context.num_vertices() - 2)/2 - 
-        (vertex.data().num_triangles + vertex.data().num_wedges + vertex.data().num_disc);
-    // vertex.data().u[0] =     
+    // vertex.data().num_triangles = ecounts.n3 / 2;
+    // vertex.data().num_wedges = ecounts.n2 - ( pow(vertex.data().vid_set.size(),2) + 3*vertex.data().vid_set.size() )/2 +
+    //     vertex.data().num_triangles;
+    // vertex.data().num_disc = ecounts.n1 + context.num_edges() - 3*vertex.data().num_triangles + pow(vertex.data().vid_set.size(),2) - ecounts.n2; //works for small example?????
+    // vertex.data().num_empty = (context.num_vertices()  - 1)*(context.num_vertices() - 2)/2 - 
+    //     (vertex.data().num_triangles + vertex.data().num_wedges + vertex.data().num_disc);
+    // // vertex.data().u[0] =
     // vertex.data().u[1] =     
-    // vertex.data().u[2] =
+    vertex.data().u[2] = (ecounts.n1sq - ecounts.n1)/2;
+    vertex.data().u[3] = (pow(vertex.data().vid_set.size(),3) - pow(vertex.data().vid_set.size(),2) - 
+        vertex.data().vid_set.size() - (2*vertex.data().vid_set.size() + 1)*ecounts.n3 + ecounts.n3sq)/2;
     vertex.data().u[4] = (ecounts.n3sq - ecounts.n3)/2; //dont care about double counts here???
-    vertex.data().u[10] = vertex.data().num_triangles * vertex.data().vid_set.size();
+    vertex.data().u[5] = (vertex.data().vid_set.size() - 1)*(context.num_vertices()*vertex.data().vid_set.size() - ecounts.n2) + 
+        (1 - vertex.data().vid_set.size() - context.num_vertices())*ecounts.n3 + ecounts.n4 - ecounts.n3sq;
+    vertex.data().u[6] = context.num_vertices()*vertex.data().vid_set.size()*ecounts.n3 - ecounts.n4 + ecounts.n3sq;
+    vertex.data().u[7] = (vertex.data().vid_set.size() - 1)*(ecounts.n2 - 2*ecounts.n3 - pow(vertex.data().vid_set.size(),2)) + 
+      vertex.data().vid_set.size() - pow(vertex.data().vid_set.size(),2) - ecounts.n4 + ecounts.n3sq;
+    vertex.data().u[8] = (vertex.data().vid_set.size() - 1)*ecounts.n3 - ecounts.n3sq;
+    //vertex.data().u[9] = (context.num_vertices() - 3)*(pow(vertex.data().vid_set.size(),2) - vertex.data().vid_set.size())/2;
+    vertex.data().u[9] = (context.num_edges() - 3*vertex.data().num_triangles + 
+        pow(vertex.data().vid_set.size(),2) - ecounts.n2)*(vertex.data().vid_set.size());
+    //vertex.data().u[10] = vertex.data().num_triangles * vertex.data().vid_set.size();
+    vertex.data().u[10] = vertex.data().num_triangles * (vertex.data().vid_set.size()-2);
     vertex.data().vid_set.clear(); //still necessary??
   }
 
@@ -696,29 +790,29 @@ vertex_data_type get_vertex_data(const graph_type::vertex_type& v) {
   return v.data();
 }
 
-/*
- * A saver which saves a file where each line is a vid / # triangles pair
- */
-struct save_profile_count{
-  std::string save_vertex(graph_type::vertex_type v) { 
-  //   double nt = v.data().num_triangles;
-  //   double n_followed = v.num_out_edges();
-  //   double n_following = v.num_in_edges();
+// /*
+//  * A saver which saves a file where each line is a vid / # triangles pair
+//  */
+// struct save_profile_count{
+//   std::string save_vertex(graph_type::vertex_type v) { 
+//   //   double nt = v.data().num_triangles;
+//   //   double n_followed = v.num_out_edges();
+//   //   double n_following = v.num_in_edges();
 
-  //   return graphlab::tostr(v.id()) + "\t" +
-  //          graphlab::tostr(nt) + "\t" +
-  //          graphlab::tostr(n_followed) + "\t" + 
-  //          graphlab::tostr(n_following) + "\n";
-  return graphlab::tostr(v.id()) + "\t" +
-         graphlab::tostr(v.data().num_triangles) + "\t" +
-         graphlab::tostr(v.data().num_wedges) + "\t" +
-         graphlab::tostr(v.data().num_disc) + "\t" +
-         graphlab::tostr(v.data().num_empty) + "\n";
-  }
-  std::string save_edge(graph_type::edge_type e) {
-    return "";
-  }
-};
+//   //   return graphlab::tostr(v.id()) + "\t" +
+//   //          graphlab::tostr(nt) + "\t" +
+//   //          graphlab::tostr(n_followed) + "\t" + 
+//   //          graphlab::tostr(n_following) + "\n";
+//   return graphlab::tostr(v.id()) + "\t" +
+//          graphlab::tostr(v.data().num_triangles) + "\t" +
+//          graphlab::tostr(v.data().num_wedges) + "\t" +
+//          graphlab::tostr(v.data().num_disc) + "\t" +
+//          graphlab::tostr(v.data().num_empty) + "\n";
+//   }
+//   std::string save_edge(graph_type::edge_type e) {
+//     return "";
+//   }
+// };
 
 
 int main(int argc, char** argv) {
@@ -797,6 +891,26 @@ int main(int argc, char** argv) {
     // dc.cout() << count << " Triangles"  << std::endl;
     vertex_data_type global_u = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
     
+/* inverse to system of equations, take the inner product of rows of this matrix with global_u :
+    1.0000         0         0         0         0         0         0         0         0        0         0         0         0         0         0         0         0
+         0    1.0000         0         0         0         0         0         0         0        0         0         0         0         0         0         0         0
+         0   -1.0000    1.0000         0         0         0         0         0         0        0         0         0         0         0         0         0         0
+         0   -1.0000    1.0000         0   -1.0000    1.0000         0         0   -0.5000  -1.0000    1.0000    1.0000    1.0000         0   -1.0000   -1.0000         0
+         0   -0.5000    0.5000         0   -0.5000    0.5000         0         0   -0.2500  -0.5000    0.5000         0    0.5000         0   -0.5000   -0.5000         0      
+         0    1.0000   -1.0000         0    1.0000         0         0         0    0.5000   1.0000   -1.0000         0         0         0    1.0000    1.0000         0      
+         0    1.0000   -1.0000         0    1.0000         0         0         0    0.5000   1.0000   -1.0000         0   -1.0000         0    1.0000    1.0000         0      
+         0         0         0         0    1.0000         0    0.5000         0    0.5000        0   -1.0000         0         0         0    1.0000    0.5000         0
+         0         0         0    1.0000    1.0000         0         0         0    0.5000        0   -1.0000         0         0    1.0000    2.0000    1.0000         0
+         0         0         0    0.3333    0.3333         0         0         0    0.1667        0   -0.3333         0         0         0    0.6667    0.3333         0
+         0   -0.5000    0.5000         0   -0.5000         0         0    0.5000   -0.2500  -0.5000    0.5000         0    0.5000         0   -0.5000   -0.5000         0
+         0         0         0         0   -1.0000         0         0         0   -0.5000        0    1.0000         0         0         0   -1.0000   -1.0000         0
+         0         0         0         0   -1.0000         0         0         0   -0.5000        0    1.0000         0         0         0   -2.0000   -1.0000         0
+         0         0         0         0   -2.0000         0         0         0   -1.0000        0    2.0000         0         0         0   -2.0000   -1.0000         0
+         0         0         0         0    1.0000         0         0         0    1.0000        0   -1.0000         0         0         0    2.0000    1.0000    1.0000
+         0         0         0         0    1.0000         0         0         0    1.0000        0   -1.0000         0         0         0    2.0000    1.0000         0
+         0         0         0         0         0         0         0         0   -0.3333        0    0.3333         0         0         0   -0.6667   -0.3333         0
+*/
+
     //solve system of equations here
     size_t ng[17] = {};
     size_t n4final[11] = {};
