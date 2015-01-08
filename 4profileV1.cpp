@@ -27,8 +27,8 @@
 #include <graphlab/util/hopscotch_set.hpp>
 #include <graphlab/macros_def.hpp>
 
-#include <Eigen/Dense>
-#include "eigen_serialization.hpp"
+// #include <Eigen/Dense>
+// #include "eigen_serialization.hpp"
 
 #define USIZE 11
 
@@ -362,9 +362,9 @@ static size_t count_set_intersect(
 //class instead??
 class uvec {
 private:
-  size_t value[USIZE];
+  // size_t value[USIZE];
 public:
-
+  size_t value[USIZE];
   size_t& operator[](int i){
     if( i > USIZE ){
       std::cout << "Index out of bounds" <<std::endl; 
@@ -388,6 +388,14 @@ public:
     }
     return sum;
   }
+  
+  // size_t operator*(const size_t& b) {
+  //   size_t sum = 0;
+  //   for (int i = 0; i < USIZE; ++i){
+  //     sum += value[i]*b[i];
+  //   }
+  //   return sum;
+  // }
 
   uvec& operator+=(const uvec& b){
     for (int i = 0; i < USIZE; ++i){
@@ -588,6 +596,7 @@ void init_vertex(graph_type::vertex_type& vertex) {
   for(int i=0; i < USIZE; i++) {
     vertex.data().u[i] = 0;
   }
+  // vertex.data().u = {{0,0,0,0,0,0,0,0,0,0,0}};
 }
 
 
@@ -747,23 +756,38 @@ public:
     // vertex.data().num_disc = ecounts.n1 + context.num_edges() - 3*vertex.data().num_triangles + pow(vertex.data().vid_set.size(),2) - ecounts.n2; //works for small example?????
     // vertex.data().num_empty = (context.num_vertices()  - 1)*(context.num_vertices() - 2)/2 - 
     //     (vertex.data().num_triangles + vertex.data().num_wedges + vertex.data().num_disc);
+    // |V| - 1 choose 3, or just solve last globally?
     // // vertex.data().u[0] =
+    
+    //how do we calculate H_1 exactly?? something similar to n_1^d with number of total edges??
     // vertex.data().u[1] =     
     vertex.data().u[2] = (ecounts.n1sq - ecounts.n1)/2;
-    vertex.data().u[3] = (pow(vertex.data().vid_set.size(),3) - pow(vertex.data().vid_set.size(),2) - 
-        vertex.data().vid_set.size() - (2*vertex.data().vid_set.size() + 1)*ecounts.n3 + ecounts.n3sq)/2;
+    // vertex.data().u[3] = (pow(vertex.data().vid_set.size(),3) - pow(vertex.data().vid_set.size(),2) - 
+        // vertex.data().vid_set.size() - (2*vertex.data().vid_set.size() + 1)*ecounts.n3 + ecounts.n3sq)/2;
+    vertex.data().u[3] = (vertex.data().vid_set.size()*(pow(vertex.data().vid_set.size(),2) - 
+        3*vertex.data().vid_set.size() + 2) + 3*ecounts.n3 - 2*vertex.data().vid_set.size()*ecounts.n3 + ecounts.n3sq)/2;
     vertex.data().u[4] = (ecounts.n3sq - ecounts.n3)/2; //dont care about double counts here???
     vertex.data().u[5] = (vertex.data().vid_set.size() - 1)*(context.num_vertices()*vertex.data().vid_set.size() - ecounts.n2) + 
         (1 - vertex.data().vid_set.size() - context.num_vertices())*ecounts.n3 + ecounts.n4 - ecounts.n3sq;
-    vertex.data().u[6] = context.num_vertices()*vertex.data().vid_set.size()*ecounts.n3 - ecounts.n4 + ecounts.n3sq;
-    vertex.data().u[7] = (vertex.data().vid_set.size() - 1)*(ecounts.n2 - 2*ecounts.n3 - pow(vertex.data().vid_set.size(),2)) + 
-      vertex.data().vid_set.size() - pow(vertex.data().vid_set.size(),2) - ecounts.n4 + ecounts.n3sq;
+    vertex.data().u[6] = context.num_vertices()*ecounts.n3 + ecounts.n3sq - ecounts.n4; //subtract at the end??!
+    // vertex.data().u[7] = (vertex.data().vid_set.size() - 1)*(ecounts.n2 + 2*ecounts.n3 - pow(vertex.data().vid_set.size(),2)) + 
+    //   vertex.data().vid_set.size() - pow(vertex.data().vid_set.size(),2) - ecounts.n4 + ecounts.n3sq + 2*ecounts.n3;
+    vertex.data().u[7] = (vertex.data().vid_set.size() - 1)*ecounts.n2 + 2*vertex.data().vid_set.size()*ecounts.n3 + 
+        vertex.data().vid_set.size()*(1 - pow(vertex.data().vid_set.size(),2)) - ecounts.n4 + ecounts.n3sq;
     vertex.data().u[8] = (vertex.data().vid_set.size() - 1)*ecounts.n3 - ecounts.n3sq;
     //vertex.data().u[9] = (context.num_vertices() - 3)*(pow(vertex.data().vid_set.size(),2) - vertex.data().vid_set.size())/2;
-    vertex.data().u[9] = (context.num_edges() - 3*vertex.data().num_triangles + 
+    vertex.data().u[9] = (context.num_edges() - 1.5*ecounts.n3 + 
         pow(vertex.data().vid_set.size(),2) - ecounts.n2)*(vertex.data().vid_set.size());
     //vertex.data().u[10] = vertex.data().num_triangles * vertex.data().vid_set.size();
-    vertex.data().u[10] = vertex.data().num_triangles * (vertex.data().vid_set.size()-2);
+    // vertex.data().u[10] = ecounts.n3*(vertex.data().vid_set.size() - 2)/2; 
+    // vertex.data().u[10] = (ecounts.n3*vertex.data().vid_set.size() - 2*ecounts.n3)/2; //just distribute, some optimizations like factoring will break the long arithmetic
+    // vertex.data().u[10] = ecounts.n3/2 * (vertex.data().vid_set.size() >= 2 ? vertex.data().vid_set.size() - 2 : 2 - vertex.data().vid_set.size());
+    
+    // std::cout << "u3: " << vertex.data().u[3] << ", deg: " << vertex.data().vid_set.size() << std::endl;
+    // std::cout << "u6: " << vertex.data().u[6] << std::endl;
+    // std::cout << "u8: " << vertex.data().u[8] << std::endl;
+    // std::cout << "u9: " << vertex.data().u[9] << std::endl;
+    // std::cout << "u10: " << vertex.data().u[10] << std::endl;
     vertex.data().vid_set.clear(); //still necessary??
   }
 
@@ -887,10 +911,16 @@ int main(int argc, char** argv) {
     graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
     engine.signal_all();
     engine.start();
-  // size_t count = graph.map_reduce_edges<size_t>(get_edge_data);
-    // dc.cout() << count << " Triangles"  << std::endl;
     vertex_data_type global_u = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
-    
+    //maybe hardcode an input global_u here for testing what follows?
+    // global_u.u[3]=2;
+    // global_u.u[6]=1;
+    // global_u.u[8]=4;
+    // global_u.u[9]=2;
+    // global_u.u[10]=2;
+
+
+//this matrix is wrong, fingers crossed for more equations...
 /* inverse to system of equations, take the inner product of rows of this matrix with global_u :
     1.0000         0         0         0         0         0         0         0         0        0         0         0         0         0         0         0         0
          0    1.0000         0         0         0         0         0         0         0        0         0         0         0         0         0         0         0
@@ -914,12 +944,59 @@ int main(int argc, char** argv) {
     //solve system of equations here
     size_t ng[17] = {};
     size_t n4final[11] = {};
-    //ng[0] = A*u // write inner product operator for two size_t arrays? this might work if using the graphical_models/utils.hpp?
-    //n4final[z] = ng[y]/z
+    //use this global equation to increase rank, maybe assign to global_u.u[10]?
+    size_t ulast = graph.num_edges()*(graph.num_edges()-1)*(graph.num_edges()-2)/6;
+    // global_u.u[10] = ulast;
 
-    dc.cout() << "Global 4-profile Counted in " << ti2.current_time() << " seconds" << std::endl;
-    
+    uvec A1 = {{0,1,0,0,0,0,0,0,0,0,0}};
+    uvec A2 = {{0,-1,1,0,0,0,0,0,0,0,0}};
+    // uvec A3 = {{0,-1,1,0,-1,1,0,0,-0.5,-1,1}};
+    // uvec A3 = {{0,-2,2,0,-2,2,0,0,-1,-2,2}};
+    // uvec A4 = {{0,-.5,.5,0,-.5,.5,0,0,-.25,-.5,.5}};
+    uvec A4 = {{0,-2,2,0,-2,2,0,0,-1,-2,2}};
+    uvec A6 = {{0,2,-2,0,2,0,0,0,1,2,-2}};
+    uvec A7 = {{0,0,0,0,2,0,1,0,1,0,-2}};
+    uvec A9 = {{0,0,0,2,2,0,0,0,1,0,-2}};
+    uvec A10 = {{0,-2,2,0,-2,0,0,2,-1,-2,2}};
+    uvec A11 = {{0,0,0,0,-2,0,0,0,-1,0,2}};
+    uvec A14 = {{0,0,0,0,1,0,0,0,1,0,-1}};
+    uvec A16 = {{0,0,0,0,0,0,0,0,-1,0,1}};
+    //ng[0] = A*u // use existing library with inner product or write our own lightweight class?
+    ng[1] = global_u.u * A1;
+    ng[2] = global_u.u * A2;
+    // ng[3] = (global_u.u * A3) / 2;
+    ng[4] = (global_u.u * A4) / 4.;
+    ng[6] = (global_u.u * A6) / 2.;
+    ng[7] = (global_u.u * A7) / 2.;
+    ng[9] = (global_u.u * A9) / 6.;
+    ng[10] = (global_u.u * A10) / 4.;
+    ng[11] = (global_u.u * A11) / 2.;
+    ng[14] = global_u.u * A14;
+    ng[16] = (global_u.u * A16) / 3.;
+
+    //collapse to final global 4 profile
+    n4final[1] = ng[1]/2;
+    n4final[2] = ng[2]/4;
+    n4final[3] = ng[4];
+    n4final[4] = ng[6]/2;
+    n4final[5] = ng[7]/3;
+    n4final[6] = ng[9];
+    n4final[7] = ng[10]/4;
+    n4final[8] = ng[11];
+    n4final[9] = ng[14]/2;
+    n4final[10] = ng[16]/4;
     size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2)*(graph.num_vertices()-3))/24.; //normalize by |V| choose 4
+    n4final[0] = denom - (n4final[1] + n4final[2] + n4final[3] + n4final[4] + 
+        n4final[5] + n4final[6] + n4final[7] + n4final[8] + n4final[9] + n4final[10]);
+    
+    dc.cout() << "Global 4-profile Counted in " << ti2.current_time() << " seconds" << std::endl;
+   
+
+    dc.cout() << "Global u: ";
+    for(int i=0; i<11; i++){
+      dc.cout() << global_u.u[i] << " ";
+    }
+    dc.cout() << std::endl;
     //size_t denom = 1;
     dc.cout() << "denominator: " << denom << std::endl;
     dc.cout() << "Global count: ";
@@ -929,7 +1006,7 @@ int main(int argc, char** argv) {
     dc.cout() << std::endl;
     dc.cout() << "Global count (normalized): ";
     for(int i=0; i<11; i++){
-      dc.cout() << n4final[i]/denom << " ";
+      dc.cout() << double(n4final[i])/denom << " ";
     }
     dc.cout() << std::endl;
   }
