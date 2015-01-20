@@ -99,6 +99,11 @@ The views and conclusions contained in the software and documentation are those 
 authors and should not be interpreted as representing official policies, either expressed
 or implied, of Erik Gorset.
 */
+
+//probability of keeping an edge in the edges sampling process
+float sample_prob_keep = 1;
+size_t total_edges = 0;
+
 void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift) {
     int x, y;
     graphlab::vertex_id_type value, temp;
@@ -363,12 +368,13 @@ struct edge_data_type {
   size_t n3;
   size_t n2;
   size_t n1;
+  bool sample_indicator;
   void save(graphlab::oarchive &oarc) const {
     //oarc << vid_set << num_triangles;
-    oarc << n1 << n2 << n3;
+    oarc << n1 << n2 << n3 << sample_indicator;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> n1 >> n2 >> n3;
+    iarc >> n1 >> n2 >> n3 >> sample_indicator;
   }
 };
 
@@ -481,6 +487,15 @@ void init_vertex(graph_type::vertex_type& vertex) {
 }
 
 
+void sample_edge(graph_type::edge_type& edge) {
+  
+  if(graphlab::random::rand01() < sample_prob_keep)   
+    edge.data().sample_indicator = 1;
+  else
+    edge.data().sample_indicator = 0;
+}
+
+
 /*
  * This class implements the triangle counting algorithm as described in
  * the header. On gather, we accumulate a set of all adjacent vertices.
@@ -510,7 +525,11 @@ public:
                      const vertex_type& vertex,
                      edge_type& edge) const {
     set_union_gather gather;
-    graphlab::vertex_id_type otherid = edge.target().id() == vertex.id() ?
+    if(edge.data().sample_indicator == 0){
+      gather.v = -1; 
+    }
+    else{
+      graphlab::vertex_id_type otherid = edge.target().id() == vertex.id() ?
                                        edge.source().id() : edge.target().id();
 
     // size_t other_nbrs = (edge.target().id() == vertex.id()) ?
@@ -521,9 +540,10 @@ public:
 
     //if (PER_VERTEX_COUNT || (other_nbrs > my_nbrs) || (other_nbrs == my_nbrs && otherid > vertex.id())) {
     //if (PER_VERTEX_COUNT || otherid > vertex.id()) {
-    gather.v = otherid; //will this work? what is v??
+      gather.v = otherid; //will this work? what is v??
     //} 
-    return gather;
+   } 
+   return gather;
   }
 
   /*
@@ -567,22 +587,24 @@ public:
               const vertex_type& vertex,
               edge_type& edge) const {
     //    vertex_type othervtx = edge.target();
-    const vertex_data_type& srclist = edge.source().data();
-    const vertex_data_type& targetlist = edge.target().data();
-    size_t tmp= 0, tmp2 = 0;
-    if (targetlist.vid_set.size() < srclist.vid_set.size()) {
-      //edge.data() += count_set_intersect(targetlist.vid_set, srclist.vid_set);
-      //will this work with += increment??
-      tmp = count_set_intersect(targetlist.vid_set, srclist.vid_set);
+    if (edge.data().sample_indicator == 1){
+      const vertex_data_type& srclist = edge.source().data();
+      const vertex_data_type& targetlist = edge.target().data();
+      size_t tmp= 0, tmp2 = 0;
+      if (targetlist.vid_set.size() < srclist.vid_set.size()) {
+        //edge.data() += count_set_intersect(targetlist.vid_set, srclist.vid_set);
+        //will this work with += increment??
+        tmp = count_set_intersect(targetlist.vid_set, srclist.vid_set);
+      }
+      else {
+        //edge.data() += count_set_intersect(srclist.vid_set, targetlist.vid_set);
+        tmp = count_set_intersect(srclist.vid_set, targetlist.vid_set);
+      }
+      tmp2 = srclist.vid_set.size() + targetlist.vid_set.size();
+      edge.data().n3 = tmp;
+      edge.data().n2 =  tmp2 - 2*tmp;
+      edge.data().n1 = context.num_vertices() - (tmp2 - tmp);
     }
-    else {
-      //edge.data() += count_set_intersect(srclist.vid_set, targetlist.vid_set);
-      tmp = count_set_intersect(srclist.vid_set, targetlist.vid_set);
-    }
-    tmp2 = srclist.vid_set.size() + targetlist.vid_set.size();
-    edge.data().n3 = tmp;
-    edge.data().n2 =  tmp2 - 2*tmp;
-    edge.data().n1 = context.num_vertices() - (tmp2 - tmp);
   }
 };
 
@@ -608,11 +630,18 @@ public:
   gather_type gather(icontext_type& context,
                      const vertex_type& vertex,
                      edge_type& edge) const {
-    //return edge.data();
     edge_sum_gather gather;
-    gather.n1 = edge.data().n1;
-    gather.n2 = edge.data().n2;
-    gather.n3 = edge.data().n3;
+    if (edge.data().sample_indicator == 1){
+      //return edge.data();
+      gather.n1 = edge.data().n1;
+      gather.n2 = edge.data().n2;
+      gather.n3 = edge.data().n3;
+    }
+    else{
+      gather.n1 = 0;
+      gather.n2 = 0;
+      gather.n3 = 0;
+    }
     return gather;
   }
 
@@ -627,7 +656,7 @@ public:
     vertex.data().num_triangles = ecounts.n3 / 2;
     vertex.data().num_wedges = ecounts.n2 - ( pow(vertex.data().vid_set.size(),2) + 3*vertex.data().vid_set.size() )/2 +
         vertex.data().num_triangles;
-    vertex.data().num_disc = ecounts.n1 + context.num_edges() - 3*vertex.data().num_triangles + pow(vertex.data().vid_set.size(),2) - ecounts.n2; //works for small example?????
+    vertex.data().num_disc = ecounts.n1 + /*context.num_edges()*/total_edges - 3*vertex.data().num_triangles + pow(vertex.data().vid_set.size(),2) - ecounts.n2; //works for small example?????
     vertex.data().num_empty = (context.num_vertices()  - 1)*(context.num_vertices() - 2)/2 - 
         (vertex.data().num_triangles + vertex.data().num_wedges + vertex.data().num_disc);
     vertex.data().vid_set.clear(); //still necessary??    
@@ -654,6 +683,15 @@ public:
 
 vertex_data_type get_vertex_data(const graph_type::vertex_type& v) {
   return v.data();
+}
+
+//For sanity check of total edges via total degree
+//size_t get_vertex_degree(const graph_type::vertex_type& v){
+//	return v.data().vid_set.size();
+//}
+
+size_t get_edge_sample_indicator(const graph_type::edge_type& e){
+        return e.data().sample_indicator;
 }
 
 /*
@@ -706,6 +744,9 @@ int main(int argc, char** argv) {
                        "save to file with prefix \"[per_vertex]\". "
                        "The algorithm used is slightly different "
                        "and thus will be a little slower");
+ clopts.attach_option("sample_keep_prob", sample_prob_keep,
+                       "Probability of keeping edge during sampling");
+
   if(!clopts.parse(argc, argv)) return EXIT_FAILURE;
   if (prefix == "") {
     std::cout << "--graph is not optional\n";
@@ -730,22 +771,38 @@ int main(int argc, char** argv) {
   graph.load_format(prefix, format);
   graph.finalize();
   dc.cout() << "Number of vertices: " << graph.num_vertices() << std::endl
-            << "Number of edges:    " << graph.num_edges() << std::endl;
+            << "Number of edges (before sampling):    " << graph.num_edges() << std::endl;
+
+  dc.cout() << "sample_prob_keep = " << sample_prob_keep << std::endl;
 
   graphlab::timer ti;
   
   // Initialize the vertex data
   graph.transform_vertices(init_vertex);
 
+  //Sampling
+  graph.transform_edges(sample_edge);
+  //total_edges = graph.map_reduce_vertices<size_t>(get_vertex_degree)/2;
+  total_edges = graph.map_reduce_edges<size_t>(get_edge_sample_indicator);
+  dc.cout() << "Total edges counted (after sampling):" << total_edges << std::endl;
+
+
   // create engine to count the number of triangles
   dc.cout() << "Counting Triangles..." << std::endl;
   graphlab::synchronous_engine<triangle_count> engine(dc, graph, clopts);
   // engine_type engine(dc, graph, clopts);
+
+
   engine.signal_all();
   engine.start();
 
+
   dc.cout() << "Round 1 Counted in " << ti.current_time() << " seconds" << std::endl;
   
+  //Sanity check for total edges count and degrees
+  //total_edges = graph.map_reduce_vertices<size_t>(get_vertex_degree)/2;  
+  //dc.cout() << "Total edges counted (after sampling) using degrees:" << total_edges << std::endl;
+
   //cannot put second engine before conditional?
   graphlab::timer ti2;
 
@@ -757,6 +814,7 @@ int main(int argc, char** argv) {
   // size_t count = graph.map_reduce_edges<size_t>(get_edge_data);
     // dc.cout() << count << " Triangles"  << std::endl;
     vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
+
     size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
     //size_t denom = 1;
     dc.cout() << "denominator: " << denom << std::endl;
