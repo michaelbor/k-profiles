@@ -337,22 +337,26 @@ struct vertex_data_type {
   // only used if "per vertex counting" is used
   size_t num_triangles;
   size_t num_wedges;
+  size_t num_wedges_e;
+  size_t num_wedges_c;  
   size_t num_disc;
   size_t num_empty;
   
   vertex_data_type& operator+=(const vertex_data_type& other) {
     num_triangles += other.num_triangles;
     num_wedges += other.num_wedges;
+    num_wedges_e += other.num_wedges_e;
+    num_wedges_c += other.num_wedges_c;
     num_disc += other.num_disc;
     num_empty += other.num_empty;
     return *this;
   }
   
   void save(graphlab::oarchive &oarc) const {
-    oarc << vid_set << num_triangles << num_wedges << num_disc << num_empty;
+    oarc << vid_set << num_triangles << num_wedges << num_wedges_e << num_wedges_c << num_disc << num_empty;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> vid_set >> num_triangles >> num_wedges >> num_disc >>num_empty;
+    iarc >> vid_set >> num_triangles >> num_wedges >> num_wedges_e >> num_wedges_c >> num_disc >>num_empty;
   }
 };
 
@@ -360,6 +364,7 @@ struct vertex_data_type {
 
 /*
  * Each edge is simply a counter of triangles
+ *
  */
 //typedef uint32_t edge_data_type;
 
@@ -367,36 +372,43 @@ struct vertex_data_type {
 struct edge_data_type {
   size_t n3;
   size_t n2;
+  size_t n2e;
+  size_t n2c;
   size_t n1;
   bool sample_indicator;
   void save(graphlab::oarchive &oarc) const {
     //oarc << vid_set << num_triangles;
-    oarc << n1 << n2 << n3 << sample_indicator;
+    oarc << n1 << n2 << n2e << n2c << n3 << sample_indicator;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> n1 >> n2 >> n3 >> sample_indicator;
+    iarc >> n1 >> n2 >> n2e >> n2c >> n3 >> sample_indicator;
   }
 };
 
 struct edge_sum_gather {
   size_t n3;
   size_t n2;
+  size_t n2e;
+  size_t n2c;
   size_t n1;
   edge_sum_gather& operator+=(const edge_sum_gather& other) {
     n3 += other.n3;
     n2 += other.n2;
+    n2e += other.n2e;
+    n2c += other.n2c;
     n1 += other.n1;
+    
     return *this;
   }
 
   // serialize
   void save(graphlab::oarchive& oarc) const {
-    oarc << n1 << n2 << n3;
+    oarc << n1 << n2 << n2e << n2c << n3;
   }
 
   // deserialize
   void load(graphlab::iarchive& iarc) {
-    iarc >> n1 >> n2 >> n3;
+    iarc >> n1 >> n2 >> n2e >> n2c >> n3;
   }
 };
 
@@ -481,7 +493,9 @@ typedef graphlab::distributed_graph<vertex_data_type,
 //move init outside constructor (must be declared after graph_type)
 void init_vertex(graph_type::vertex_type& vertex) { 
   vertex.data().num_triangles = 0; 
-  vertex.data().num_wedges = 0; 
+  vertex.data().num_wedges = 0;
+  vertex.data().num_wedges_e = 0;
+  vertex.data().num_wedges_c = 0; 
   vertex.data().num_disc = 0; 
   vertex.data().num_empty = 0;
 }
@@ -603,6 +617,10 @@ public:
       tmp2 = srclist.vid_set.size() + targetlist.vid_set.size();
       edge.data().n3 = tmp;
       edge.data().n2 =  tmp2 - 2*tmp;
+      
+      edge.data().n2c = srclist.vid_set.size() - tmp - 1;
+      edge.data().n2e = targetlist.vid_set.size() - tmp - 1;       
+
       edge.data().n1 = context.num_vertices() - (tmp2 - tmp);
     }
   }
@@ -636,10 +654,20 @@ public:
       gather.n1 = edge.data().n1;
       gather.n2 = edge.data().n2;
       gather.n3 = edge.data().n3;
+      if (vertex.id() == edge.source().id()){
+        gather.n2e = edge.data().n2e;
+        gather.n2c = edge.data().n2c;
+      }
+      else{
+        gather.n2e = edge.data().n2c;
+        gather.n2c = edge.data().n2e;
+      }
     }
     else{
       gather.n1 = 0;
       gather.n2 = 0;
+      gather.n2e = 0;
+      gather.n2c = 0;
       gather.n3 = 0;
     }
     return gather;
@@ -654,8 +682,13 @@ public:
     //vertex.data().num_triangles = num_triangles / 2;
     //vid_set.size() or vid_vec.size()
     vertex.data().num_triangles = ecounts.n3 / 2;
-    vertex.data().num_wedges = ecounts.n2 - ( pow(vertex.data().vid_set.size(),2) + 3*vertex.data().vid_set.size() )/2 +
-        vertex.data().num_triangles;
+    //vertex.data().num_wedges = ecounts.n2 - ( pow(vertex.data().vid_set.size(),2) + 3*vertex.data().vid_set.size() )/2 +
+      //  vertex.data().num_triangles;
+
+    vertex.data().num_wedges_c = ecounts.n2c/2;
+    vertex.data().num_wedges_e = ecounts.n2e;
+    vertex.data().num_wedges = vertex.data().num_wedges_e + vertex.data().num_wedges_c;
+
     vertex.data().num_disc = ecounts.n1 + /*context.num_edges()*/total_edges - 3*vertex.data().num_triangles + pow(vertex.data().vid_set.size(),2) - ecounts.n2; //works for small example?????
     vertex.data().num_empty = (context.num_vertices()  - 1)*(context.num_vertices() - 2)/2 - 
         (vertex.data().num_triangles + vertex.data().num_wedges + vertex.data().num_disc);
@@ -819,7 +852,14 @@ int main(int argc, char** argv) {
     //size_t denom = 1;
     dc.cout() << "denominator: " << denom << std::endl;
     dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
+    dc.cout() << "New wedges count: " << (global_counts.num_wedges_c+global_counts.num_wedges_e)/3 << std::endl; 
     dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
+    dc.cout() << "Global count from estimators: " 
+	      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
+	      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3) << " "
+ 	      << (global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2) << " "
+	      << (global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep  << " "
+	      << std::endl;
   }
   else {
     graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
