@@ -103,6 +103,7 @@ or implied, of Erik Gorset.
 //probability of keeping an edge in the edges sampling process
 float sample_prob_keep = 1;
 size_t total_edges = 0;
+int sample_iter = 1;
 
 void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift) {
     int x, y;
@@ -779,6 +780,8 @@ int main(int argc, char** argv) {
                        "and thus will be a little slower");
  clopts.attach_option("sample_keep_prob", sample_prob_keep,
                        "Probability of keeping edge during sampling");
+clopts.attach_option("sample_iter", sample_iter,
+                       "Number of sampling iterations (global count)");
 
   if(!clopts.parse(argc, argv)) return EXIT_FAILURE;
   if (prefix == "") {
@@ -792,6 +795,11 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
+  if ((per_vertex != "") & (sample_iter > 1)) {
+    std::cout << "--multiple iterations for global count only\n";
+    clopts.print_description();
+    return EXIT_FAILURE;
+  }
 
   if (per_vertex != "") PER_VERTEX_COUNT = true;
   // Initialize control plane using mpi
@@ -807,78 +815,86 @@ int main(int argc, char** argv) {
             << "Number of edges (before sampling):    " << graph.num_edges() << std::endl;
 
   dc.cout() << "sample_prob_keep = " << sample_prob_keep << std::endl;
+  dc.cout() << "sample_iter = " << sample_iter << std::endl;
 
-  graphlab::timer ti;
-  
-  // Initialize the vertex data
-  graph.transform_vertices(init_vertex);
+  //START ITERATIONS HERE
+  for (int sit = 0; sit < sample_iter; sit++) {
 
-  //Sampling
-  graph.transform_edges(sample_edge);
-  //total_edges = graph.map_reduce_vertices<size_t>(get_vertex_degree)/2;
-  total_edges = graph.map_reduce_edges<size_t>(get_edge_sample_indicator);
-  dc.cout() << "Total edges counted (after sampling):" << total_edges << std::endl;
+    dc.cout() << "Iteration " << sit+1 << " of " << sample_iter << std::endl;
 
+    graphlab::timer ti;
+    
+    // Initialize the vertex data
+    graph.transform_vertices(init_vertex);
 
-  // create engine to count the number of triangles
-  dc.cout() << "Counting Triangles..." << std::endl;
-  graphlab::synchronous_engine<triangle_count> engine(dc, graph, clopts);
-  // engine_type engine(dc, graph, clopts);
-
-
-  engine.signal_all();
-  engine.start();
+    //Sampling
+    graph.transform_edges(sample_edge);
+    //total_edges = graph.map_reduce_vertices<size_t>(get_vertex_degree)/2;
+    total_edges = graph.map_reduce_edges<size_t>(get_edge_sample_indicator);
+    dc.cout() << "Total edges counted (after sampling):" << total_edges << std::endl;
 
 
-  dc.cout() << "Round 1 Counted in " << ti.current_time() << " seconds" << std::endl;
-  
-  //Sanity check for total edges count and degrees
-  //total_edges = graph.map_reduce_vertices<size_t>(get_vertex_degree)/2;  
-  //dc.cout() << "Total edges counted (after sampling) using degrees:" << total_edges << std::endl;
+    // create engine to count the number of triangles
+    dc.cout() << "Counting Triangles..." << std::endl;
+    graphlab::synchronous_engine<triangle_count> engine(dc, graph, clopts);
+    // engine_type engine(dc, graph, clopts);
 
-  //cannot put second engine before conditional?
-  graphlab::timer ti2;
 
-  if (PER_VERTEX_COUNT == false) {
-    graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
     engine.signal_all();
     engine.start();
-    dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
-  // size_t count = graph.map_reduce_edges<size_t>(get_edge_data);
-    // dc.cout() << count << " Triangles"  << std::endl;
-    vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
-    size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
-    //size_t denom = 1;
-    dc.cout() << "denominator: " << denom << std::endl;
-    dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
-    dc.cout() << "New wedges count: " << (global_counts.num_wedges_c+global_counts.num_wedges_e)/3 << std::endl; 
-    dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
-    dc.cout() << "Global count from estimators: " 
-	      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
-	      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3) << " "
- 	      << (global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2) << " "
-	      << (global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep  << " "
-	      << std::endl;
-  }
-  else {
-    graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
-    engine.signal_all();
-    engine.start();
-    dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
-    // graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
-    // engine.signal_all();
-    // engine.start();
-    graph.save(per_vertex,
-            save_profile_count(),
-            false, /* no compression */
-            true, /* save vertex */
-            false, /* do not save edge */
-            1);
-            // clopts.get_ncpus()); /* one file per machine */
 
-  }
+    dc.cout() << "Round 1 Counted in " << ti.current_time() << " seconds" << std::endl;
+    
+    //Sanity check for total edges count and degrees
+    //total_edges = graph.map_reduce_vertices<size_t>(get_vertex_degree)/2;  
+    //dc.cout() << "Total edges counted (after sampling) using degrees:" << total_edges << std::endl;
+
+    //cannot put second engine before conditional?
+    graphlab::timer ti2;
+
+    if (PER_VERTEX_COUNT == false) {
+      graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
+      engine.signal_all();
+      engine.start();
+      dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
+    // size_t count = graph.map_reduce_edges<size_t>(get_edge_data);
+      // dc.cout() << count << " Triangles"  << std::endl;
+      vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
+
+      size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
+      //size_t denom = 1;
+      dc.cout() << "denominator: " << denom << std::endl;
+      dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
+      dc.cout() << "New wedges count: " << (global_counts.num_wedges_c+global_counts.num_wedges_e)/3 << std::endl; 
+      dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
+      dc.cout() << "Global count from estimators: " 
+  	      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
+  	      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3) << " "
+   	      << (global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2) << " "
+  	      << (global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep  << " "
+  	      << std::endl;
+    }
+    else {
+      graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
+      engine.signal_all();
+      engine.start();
+      dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
+      // graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
+      // engine.signal_all();
+      // engine.start();
+      graph.save(per_vertex,
+              save_profile_count(),
+              false, /* no compression */
+              true, /* save vertex */
+              false, /* do not save edge */
+              1);
+              // clopts.get_ncpus()); /* one file per machine */
+
+    }
   
+  }
+
   graphlab::stop_metric_server();
 
   graphlab::mpi_tools::finalize();

@@ -969,8 +969,8 @@ int main(int argc, char** argv) {
     //use this global equation to increase rank, maybe assign to global_u.u[10]?
     // size_t ulast = graph.num_edges()*(graph.num_edges()-1)*(graph.num_edges()-2)/6;
     // global_u.u[10] = ulast;
-    size_t ulast = graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2)*(graph.num_vertices()-3)/24;
-    global_u.u[8] = ulast; //total equals vertices choose 4
+    size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2)*(graph.num_vertices()-3))/24.; //normalize by |V| choose 4
+    global_u.u[8] = denom;
 
     // uvec A1 = {{0,1,0,0,0,0,0,0,0,0,0}};
     // uvec A2 = {{0,-1,1,0,0,0,0,0,0,0,0}};
@@ -1034,9 +1034,8 @@ int main(int argc, char** argv) {
     n4final[9] = (global_u.u * A9) / 2.;
     n4final[10] = (global_u.u * A10) / 12.;
 
-    size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2)*(graph.num_vertices()-3))/24.; //normalize by |V| choose 4
-    n4final[0] = denom - (n4final[1] + n4final[2] + n4final[3] + n4final[4] + 
-        n4final[5] + n4final[6] + n4final[7] + n4final[8] + n4final[9] + n4final[10]);
+    // n4final[0] = denom - (n4final[1] + n4final[2] + n4final[3] + n4final[4] + 
+        // n4final[5] + n4final[6] + n4final[7] + n4final[8] + n4final[9] + n4final[10]);
     
     dc.cout() << "Global 4-profile Counted in " << ti2.current_time() << " seconds" << std::endl;
    
