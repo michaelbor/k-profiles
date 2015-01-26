@@ -22,11 +22,16 @@
 
 
 #include <boost/unordered_set.hpp>
+//#include <boost/multiprecision/cpp_int.hpp>
 #include <graphlab.hpp>
 #include <graphlab/ui/metrics_server.hpp>
 #include <graphlab/util/hopscotch_set.hpp>
 #include <graphlab/macros_def.hpp>
+
+//using namespace boost::multiprecision;
+
 /**
+ *
  *  
  * In this program we implement the "hash-set" version of the
  * "edge-iterator" algorithm described in
@@ -336,12 +341,12 @@ struct vertex_data_type {
   vid_vector vid_set;
   // The number of triangles this vertex is involved it.
   // only used if "per vertex counting" is used
-  size_t num_triangles;
-  size_t num_wedges;
-  size_t num_wedges_e;
-  size_t num_wedges_c;  
-  size_t num_disc;
-  size_t num_empty;
+  double num_triangles;
+  double num_wedges;
+  double num_wedges_e;
+  double num_wedges_c;  
+  double num_disc;
+  double num_empty;
   
   vertex_data_type& operator+=(const vertex_data_type& other) {
     num_triangles += other.num_triangles;
@@ -371,11 +376,11 @@ struct vertex_data_type {
 
 //NEW EDGE DATA AND GATHER
 struct edge_data_type {
-  size_t n3;
-  size_t n2;
-  size_t n2e;
-  size_t n2c;
-  size_t n1;
+  double n3;
+  double n2;
+  double n2e;
+  double n2c;
+  double n1;
   bool sample_indicator;
   void save(graphlab::oarchive &oarc) const {
     //oarc << vid_set << num_triangles;
@@ -387,11 +392,11 @@ struct edge_data_type {
 };
 
 struct edge_sum_gather {
-  size_t n3;
-  size_t n2;
-  size_t n2e;
-  size_t n2c;
-  size_t n1;
+  double n3;
+  double n2;
+  double n2e;
+  double n2c;
+  double n1;
   edge_sum_gather& operator+=(const edge_sum_gather& other) {
     n3 += other.n3;
     n2 += other.n2;
@@ -806,7 +811,7 @@ clopts.attach_option("sample_iter", sample_iter,
   graphlab::mpi_tools::init(argc, argv);
   graphlab::distributed_control dc;
 
-  graphlab::launch_metric_server();
+  //graphlab::launch_metric_server();
   // load graph
   graph_type graph(dc, clopts);
   graph.load_format(prefix, format);
@@ -835,7 +840,7 @@ clopts.attach_option("sample_iter", sample_iter,
 
 
     // create engine to count the number of triangles
-    dc.cout() << "Counting Triangles..." << std::endl;
+    dc.cout() << "Counting 3-profiles..." << std::endl;
     graphlab::synchronous_engine<triangle_count> engine(dc, graph, clopts);
     // engine_type engine(dc, graph, clopts);
 
@@ -862,12 +867,11 @@ clopts.attach_option("sample_iter", sample_iter,
       // dc.cout() << count << " Triangles"  << std::endl;
       vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
-      size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
+      //size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
       //size_t denom = 1;
-      dc.cout() << "denominator: " << denom << std::endl;
+      //dc.cout() << "denominator: " << denom << std::endl;
       dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
-      dc.cout() << "New wedges count: " << (global_counts.num_wedges_c+global_counts.num_wedges_e)/3 << std::endl; 
-      dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
+      //dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
       dc.cout() << "Global count from estimators: " 
   	      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
   	      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3) << " "
