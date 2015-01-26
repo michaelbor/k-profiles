@@ -786,8 +786,8 @@ public:
     // vertex.data().u[10] = ecounts.n3/2 * (vertex.data().vid_set.size() >= 2 ? vertex.data().vid_set.size() - 2 : 2 - vertex.data().vid_set.size());
     
     //add neighborhood indicator reductions to the gather
-    vertex.data().u[9] = ; // H_7 + H_9
-    vertex.data().u[10] = ; // H_9
+    // vertex.data().u[9] = ; // H_7 + H_9
+    // vertex.data().u[10] = ; // H_9
 
     // std::cout << "u3: " << vertex.data().u[3] << ", deg: " << vertex.data().vid_set.size() << std::endl;
     // std::cout << "u6: " << vertex.data().u[6] << std::endl;
