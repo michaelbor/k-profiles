@@ -722,7 +722,7 @@ class get_per_vertex_count :
       public graphlab::IS_POD_TYPE  {
 public:
   // Gather on all edges
-  //signal neighborhood indicator here?
+  //signal neighborhood indicator here??
   edge_dir_type gather_edges(icontext_type& context,
                              const vertex_type& vertex) const {
     return graphlab::ALL_EDGES;
@@ -763,28 +763,32 @@ public:
     
     //how do we calculate H_1 exactly?? something similar to n_1^d with number of total edges??
     // vertex.data().u[1] =     
-    vertex.data().u[2] = (ecounts.n1sq - ecounts.n1)/2;
+    vertex.data().u[0] = (ecounts.n1sq - ecounts.n1)/2;
     // vertex.data().u[3] = (pow(vertex.data().vid_set.size(),3) - pow(vertex.data().vid_set.size(),2) - 
         // vertex.data().vid_set.size() - (2*vertex.data().vid_set.size() + 1)*ecounts.n3 + ecounts.n3sq)/2;
-    vertex.data().u[3] = (vertex.data().vid_set.size()*(pow(vertex.data().vid_set.size(),2) - 
+    vertex.data().u[1] = (vertex.data().vid_set.size()*(pow(vertex.data().vid_set.size(),2) - 
         3*vertex.data().vid_set.size() + 2) + 3*ecounts.n3 - 2*vertex.data().vid_set.size()*ecounts.n3 + ecounts.n3sq)/2;
-    vertex.data().u[4] = (ecounts.n3sq - ecounts.n3)/2; //dont care about double counts here???
-    vertex.data().u[5] = (vertex.data().vid_set.size() - 1)*(context.num_vertices()*vertex.data().vid_set.size() - ecounts.n2) + 
+    vertex.data().u[7] = (ecounts.n3sq - ecounts.n3)/2; //dont care about double counts here???
+    vertex.data().u[2] = (vertex.data().vid_set.size() - 1)*(context.num_vertices()*vertex.data().vid_set.size() - ecounts.n2) + 
         (1 - vertex.data().vid_set.size() - context.num_vertices())*ecounts.n3 + ecounts.n4 - ecounts.n3sq;
-    vertex.data().u[6] = context.num_vertices()*ecounts.n3 + ecounts.n3sq - ecounts.n4; //subtract at the end??!
+    vertex.data().u[3] = context.num_vertices()*ecounts.n3 + ecounts.n3sq - ecounts.n4; //subtract at the end??!
     // vertex.data().u[7] = (vertex.data().vid_set.size() - 1)*(ecounts.n2 + 2*ecounts.n3 - pow(vertex.data().vid_set.size(),2)) + 
     //   vertex.data().vid_set.size() - pow(vertex.data().vid_set.size(),2) - ecounts.n4 + ecounts.n3sq + 2*ecounts.n3;
-    vertex.data().u[7] = (vertex.data().vid_set.size() - 1)*ecounts.n2 + 2*vertex.data().vid_set.size()*ecounts.n3 + 
+    vertex.data().u[4] = (vertex.data().vid_set.size() - 1)*ecounts.n2 + 2*vertex.data().vid_set.size()*ecounts.n3 + 
         vertex.data().vid_set.size()*(1 - pow(vertex.data().vid_set.size(),2)) - ecounts.n4 + ecounts.n3sq;
-    vertex.data().u[8] = (vertex.data().vid_set.size() - 1)*ecounts.n3 - ecounts.n3sq;
+    vertex.data().u[5] = (vertex.data().vid_set.size() - 1)*ecounts.n3 - ecounts.n3sq;
     //vertex.data().u[9] = (context.num_vertices() - 3)*(pow(vertex.data().vid_set.size(),2) - vertex.data().vid_set.size())/2;
-    vertex.data().u[9] = (context.num_edges() - 1.5*ecounts.n3 + 
+    vertex.data().u[6] = (context.num_edges() - 1.5*ecounts.n3 + 
         pow(vertex.data().vid_set.size(),2) - ecounts.n2)*(vertex.data().vid_set.size());
     //vertex.data().u[10] = vertex.data().num_triangles * vertex.data().vid_set.size();
     // vertex.data().u[10] = ecounts.n3*(vertex.data().vid_set.size() - 2)/2; 
     // vertex.data().u[10] = (ecounts.n3*vertex.data().vid_set.size() - 2*ecounts.n3)/2; //just distribute, some optimizations like factoring will break the long arithmetic
     // vertex.data().u[10] = ecounts.n3/2 * (vertex.data().vid_set.size() >= 2 ? vertex.data().vid_set.size() - 2 : 2 - vertex.data().vid_set.size());
     
+    //add neighborhood indicator reductions to the gather
+    vertex.data().u[9] = ; // H_7 + H_9
+    vertex.data().u[10] = ; // H_9
+
     // std::cout << "u3: " << vertex.data().u[3] << ", deg: " << vertex.data().vid_set.size() << std::endl;
     // std::cout << "u6: " << vertex.data().u[6] << std::endl;
     // std::cout << "u8: " << vertex.data().u[8] << std::endl;
@@ -945,64 +949,91 @@ int main(int argc, char** argv) {
 
 
 
-/*NEW MATRIX INVERSE IN TERMS OF N, (N_7 and N_7 + N_9 are the last 2 rows)
+/*NEW MATRIX INVERSE IN TERMS OF N, (N_7 + N_9 and N_9 are the last 2 rows)
 
-   -0.5000   -0.3333   -0.5000   -0.1667   -0.2500   -0.2917    0.2500   -0.0833    1.0000   0.0833    0.1667
-    0.5000         0         0         0    0.5000    0.2500   -0.5000         0         0  -0.5000   -0.5000
-         0         0         0         0   -0.2500   -0.1250    0.2500         0         0   0.2500    0.2500
-         0         0    0.5000         0   -0.5000         0         0         0         0   1.0000         0
-         0         0         0         0    0.5000         0         0         0         0  -1.0000         0
-         0         0         0    0.1667         0   -0.1667         0         0         0  -0.3333    0.3333
-         0    0.3333         0         0         0   -0.1667         0         0         0  -0.3333    0.3333
-         0         0         0         0         0         0         0         0         0   0.2500         0
-         0         0         0         0         0    0.5000         0         0         0   1.0000   -1.0000
-         0         0         0         0         0         0         0         0         0  -0.5000    0.5000
-         0         0         0         0         0         0         0    0.0833         0   0.0833   -0.0833
+   -0.5000   -0.3333   -0.5000   -0.1667   -0.2500   -0.2917    0.2500   -0.0833    1.0000   0.2500   -0.0833
+    0.5000         0         0         0    0.5000    0.2500   -0.5000         0         0  -1.0000    0.5000
+         0         0         0         0   -0.2500   -0.1250    0.2500         0         0   0.5000   -0.2500
+         0         0    0.5000         0   -0.5000         0         0         0         0   1.0000   -1.0000
+         0         0         0         0    0.5000         0         0         0         0  -1.0000    1.0000
+         0         0         0    0.1667         0   -0.1667         0         0         0        0    0.3333
+         0    0.3333         0         0         0   -0.1667         0         0         0        0    0.3333
+         0         0         0         0         0         0         0         0         0   0.2500   -0.2500
+         0         0         0         0         0    0.5000         0         0         0        0   -1.0000
+         0         0         0         0         0         0         0         0         0        0    0.5000
+         0         0         0         0         0         0         0    0.0833         0        0   -0.0833
 */
     //solve system of equations here
-    size_t ng[17] = {};
+    // size_t ng[17] = {};
     size_t n4final[11] = {};
     //use this global equation to increase rank, maybe assign to global_u.u[10]?
-    size_t ulast = graph.num_edges()*(graph.num_edges()-1)*(graph.num_edges()-2)/6;
+    // size_t ulast = graph.num_edges()*(graph.num_edges()-1)*(graph.num_edges()-2)/6;
     // global_u.u[10] = ulast;
+    size_t ulast = graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2)*(graph.num_vertices()-3)/24;
+    global_u.u[8] = ulast; //total equals vertices choose 4
 
-    uvec A1 = {{0,1,0,0,0,0,0,0,0,0,0}};
-    uvec A2 = {{0,-1,1,0,0,0,0,0,0,0,0}};
-    // uvec A3 = {{0,-1,1,0,-1,1,0,0,-0.5,-1,1}};
-    // uvec A3 = {{0,-2,2,0,-2,2,0,0,-1,-2,2}};
-    // uvec A4 = {{0,-.5,.5,0,-.5,.5,0,0,-.25,-.5,.5}};
-    uvec A4 = {{0,-2,2,0,-2,2,0,0,-1,-2,2}};
-    uvec A6 = {{0,2,-2,0,2,0,0,0,1,2,-2}};
-    uvec A7 = {{0,0,0,0,2,0,1,0,1,0,-2}};
-    uvec A9 = {{0,0,0,2,2,0,0,0,1,0,-2}};
-    uvec A10 = {{0,-2,2,0,-2,0,0,2,-1,-2,2}};
-    uvec A11 = {{0,0,0,0,-2,0,0,0,-1,0,2}};
-    uvec A14 = {{0,0,0,0,1,0,0,0,1,0,-1}};
-    uvec A16 = {{0,0,0,0,0,0,0,0,-1,0,1}};
-    //ng[0] = A*u // use existing library with inner product or write our own lightweight class?
-    ng[1] = global_u.u * A1;
-    ng[2] = global_u.u * A2;
-    // ng[3] = (global_u.u * A3) / 2;
-    ng[4] = (global_u.u * A4) / 4.;
-    ng[6] = (global_u.u * A6) / 2.;
-    ng[7] = (global_u.u * A7) / 2.;
-    ng[9] = (global_u.u * A9) / 6.;
-    ng[10] = (global_u.u * A10) / 4.;
-    ng[11] = (global_u.u * A11) / 2.;
-    ng[14] = global_u.u * A14;
-    ng[16] = (global_u.u * A16) / 3.;
+    // uvec A1 = {{0,1,0,0,0,0,0,0,0,0,0}};
+    // uvec A2 = {{0,-1,1,0,0,0,0,0,0,0,0}};
+    // // uvec A3 = {{0,-1,1,0,-1,1,0,0,-0.5,-1,1}};
+    // // uvec A3 = {{0,-2,2,0,-2,2,0,0,-1,-2,2}};
+    // // uvec A4 = {{0,-.5,.5,0,-.5,.5,0,0,-.25,-.5,.5}};
+    // uvec A4 = {{0,-2,2,0,-2,2,0,0,-1,-2,2}};
+    // uvec A6 = {{0,2,-2,0,2,0,0,0,1,2,-2}};
+    // uvec A7 = {{0,0,0,0,2,0,1,0,1,0,-2}};
+    // uvec A9 = {{0,0,0,2,2,0,0,0,1,0,-2}};
+    // uvec A10 = {{0,-2,2,0,-2,0,0,2,-1,-2,2}};
+    // uvec A11 = {{0,0,0,0,-2,0,0,0,-1,0,2}};
+    // uvec A14 = {{0,0,0,0,1,0,0,0,1,0,-1}};
+    // uvec A16 = {{0,0,0,0,0,0,0,0,-1,0,1}};
 
-    //collapse to final global 4 profile
-    n4final[1] = ng[1]/2;
-    n4final[2] = ng[2]/4;
-    n4final[3] = ng[4];
-    n4final[4] = ng[6]/2;
-    n4final[5] = ng[7]/3;
-    n4final[6] = ng[9];
-    n4final[7] = ng[10]/4;
-    n4final[8] = ng[11];
-    n4final[9] = ng[14]/2;
-    n4final[10] = ng[16]/4;
+    // //ng[0] = A*u // use existing library with inner product or write our own lightweight class?
+    // ng[1] = global_u.u * A1;
+    // ng[2] = global_u.u * A2;
+    // // ng[3] = (global_u.u * A3) / 2;
+    // ng[4] = (global_u.u * A4) / 4.;
+    // ng[6] = (global_u.u * A6) / 2.;
+    // ng[7] = (global_u.u * A7) / 2.;
+    // ng[9] = (global_u.u * A9) / 6.;
+    // ng[10] = (global_u.u * A10) / 4.;
+    // ng[11] = (global_u.u * A11) / 2.;
+    // ng[14] = global_u.u * A14;
+    // ng[16] = (global_u.u * A16) / 3.;
+    // //collapse to final global 4 profile
+    // n4final[1] = ng[1]/2;
+    // n4final[2] = ng[2]/4;
+    // n4final[3] = ng[4];
+    // n4final[4] = ng[6]/2;
+    // n4final[5] = ng[7]/3;
+    // n4final[6] = ng[9];
+    // n4final[7] = ng[10]/4;
+    // n4final[8] = ng[11];
+    // n4final[9] = ng[14]/2;
+    // n4final[10] = ng[16]/4;
+
+    //new version, skip directly to global 4-profiles
+    uvec A0 = {{-12,-8,-12,-4,-6,-7,6,-2,24,6,-2}};
+    uvec A1 = {{2,0,0,0,2,1,-2,0,0,-4,2}};
+    uvec A2 = {{0,0,0,0,-2,-1,2,0,0,4,-2}};
+    uvec A3 = {{0,0,1,0,-1,0,0,0,0,2,-2}};
+    uvec A4 = {{0,0,0,0,1,0,0,0,0,-2,2}};
+    uvec A5 = {{0,0,0,1,0,-1,0,0,0,0,2}};
+    uvec A6 = {{0,2,0,0,0,-1,0,0,0,0,2}};
+    uvec A7 = {{0,0,0,0,0,0,0,0,0,3,-3}};
+    uvec A8 = {{0,0,0,0,0,1,0,0,0,0,-2}};
+    uvec A9 = {{0,0,0,0,0,0,0,0,0,0,1}};
+    uvec A10 = {{0,0,0,0,0,0,0,1,0,0,-1}};
+    n4final[0] = (global_u.u * A0) / 24.;
+    n4final[1] = (global_u.u * A1) / 4.;
+    n4final[2] = (global_u.u * A2) / 8.;
+    n4final[3] = (global_u.u * A3) / 2.;
+    n4final[4] = (global_u.u * A4) / 2.;
+    n4final[5] = (global_u.u * A5) / 6.;
+    n4final[6] = (global_u.u * A6) / 6.;
+    n4final[7] = (global_u.u * A7) / 12.;
+    n4final[8] = (global_u.u * A8) / 2.;
+    n4final[9] = (global_u.u * A9) / 2.;
+    n4final[10] = (global_u.u * A10) / 12.;
+
     size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2)*(graph.num_vertices()-3))/24.; //normalize by |V| choose 4
     n4final[0] = denom - (n4final[1] + n4final[2] + n4final[3] + n4final[4] + 
         n4final[5] + n4final[6] + n4final[7] + n4final[8] + n4final[9] + n4final[10]);

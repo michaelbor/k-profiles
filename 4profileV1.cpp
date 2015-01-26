@@ -993,7 +993,7 @@ int main(int argc, char** argv) {
    
 
     dc.cout() << "Global u: ";
-    for(int i=0; i<11; i++){
+    for(int i=0; i<USIZE; i++){
       dc.cout() << global_u.u[i] << " ";
     }
     dc.cout() << std::endl;
