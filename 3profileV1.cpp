@@ -930,7 +930,7 @@ clopts.attach_option("sample_iter", sample_iter,
              << round((global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2)) << "\t"
              << round((global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep)  << "\t"
              << std::setprecision (6)
-             << total_time << "\t"
+             << total_time
              << std::endl;
 
       myfile.close();
