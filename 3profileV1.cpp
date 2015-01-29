@@ -746,6 +746,8 @@ struct save_profile_count{
   //          graphlab::tostr(nt) + "\t" +
   //          graphlab::tostr(n_followed) + "\t" + 
   //          graphlab::tostr(n_following) + "\n";
+  //
+  /* WE SHOULD SCALE THE LOCAL COUNTS WITH p_sample BEFORE WRITING TO FILE!!!*/
   return graphlab::tostr(v.id()) + "\t" +
          graphlab::tostr(v.data().num_triangles) + "\t" +
          graphlab::tostr(v.data().num_wedges) + "\t" +
@@ -759,8 +761,6 @@ struct save_profile_count{
 
 
 int main(int argc, char** argv) {
-  std::cout << "This program counts the exact number of triangles in the "
-            "provided graph.\n\n";
 
   graphlab::command_line_options clopts("Exact Triangle Counting. "
     "Given a graph, this program computes the total number of triangles "
@@ -841,36 +841,36 @@ clopts.attach_option("sample_iter", sample_iter,
 
     // create engine to count the number of triangles
     dc.cout() << "Counting 3-profiles..." << std::endl;
-    graphlab::synchronous_engine<triangle_count> engine(dc, graph, clopts);
+    graphlab::synchronous_engine<triangle_count> engine1(dc, graph, clopts);
     // engine_type engine(dc, graph, clopts);
 
 
-    engine.signal_all();
-    engine.start();
+    engine1.signal_all();
+    engine1.start();
 
 
-    dc.cout() << "Round 1 Counted in " << ti.current_time() << " seconds" << std::endl;
+    //dc.cout() << "Round 1 Counted in " << ti.current_time() << " seconds" << std::endl;
     
     //Sanity check for total edges count and degrees
     //total_edges = graph.map_reduce_vertices<size_t>(get_vertex_degree)/2;  
     //dc.cout() << "Total edges counted (after sampling) using degrees:" << total_edges << std::endl;
 
     //cannot put second engine before conditional?
-    graphlab::timer ti2;
-
+    //graphlab::timer ti2;
+    
+    graphlab::synchronous_engine<get_per_vertex_count> engine2(dc, graph, clopts);
+    engine2.signal_all();
+    engine2.start();
+    //dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
+    //dc.cout() << "Total Running time is: " << ti.current_time() << "seconds" << std::endl;
+    
     if (PER_VERTEX_COUNT == false) {
-      graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
-      engine.signal_all();
-      engine.start();
-      dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
-    // size_t count = graph.map_reduce_edges<size_t>(get_edge_data);
-      // dc.cout() << count << " Triangles"  << std::endl;
       vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
       //size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
       //size_t denom = 1;
       //dc.cout() << "denominator: " << denom << std::endl;
-      dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
+      //dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
       //dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
       dc.cout() << "Global count from estimators: " 
   	      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
@@ -878,30 +878,49 @@ clopts.attach_option("sample_iter", sample_iter,
    	      << (global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2) << " "
   	      << (global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep  << " "
   	      << std::endl;
+
+
+      std::ofstream myfile;
+      char fname[20];
+      sprintf(fname,"counts_3_profiles.txt");
+      bool is_new_file = true;
+      if (std::ifstream(fname)){
+        is_new_file = false;
+      }
+      myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
+      if(is_new_file) myfile << "#graph\tsample_prob_keep\ttriangles\twedges\tdisc\tempty\truntime" << std::endl;
+      myfile << prefix << "\t"
+	     << sample_prob_keep << "\t"
+             << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << "\t"
+             << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3) << "\t"
+             << (global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2) << "\t"
+             << (global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep  << "\t"
+             << ti.current_time() << "\t"
+             << std::endl;
+
+      myfile.close();
+
     }
     else {
-      graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
-      engine.signal_all();
-      engine.start();
-      dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
-      // graphlab::synchronous_engine<get_per_vertex_count> engine(dc, graph, clopts);
-      // engine.signal_all();
-      // engine.start();
       graph.save(per_vertex,
               save_profile_count(),
               false, /* no compression */
               true, /* save vertex */
               false, /* do not save edge */
-              1);
-              // clopts.get_ncpus()); /* one file per machine */
+              1); /* one file per machine */
+              // clopts.get_ncpus());
 
     }
-  
-  }
+    
+    dc.cout() << "Total Runtime: " << ti.current_time() << " sec" << std::endl;  
 
-  graphlab::stop_metric_server();
+  }//for iterations
+
+
+  //graphlab::stop_metric_server();
 
   graphlab::mpi_tools::finalize();
+
   return EXIT_SUCCESS;
 } // End of main
 
