@@ -27,6 +27,9 @@
 #include <graphlab/ui/metrics_server.hpp>
 #include <graphlab/util/hopscotch_set.hpp>
 #include <graphlab/macros_def.hpp>
+#include <limits>
+
+
 
 //using namespace boost::multiprecision;
 
@@ -822,6 +825,7 @@ clopts.attach_option("sample_iter", sample_iter,
   dc.cout() << "sample_prob_keep = " << sample_prob_keep << std::endl;
   dc.cout() << "sample_iter = " << sample_iter << std::endl;
 
+  double total_time;
   //START ITERATIONS HERE
   for (int sit = 0; sit < sample_iter; sit++) {
 
@@ -879,7 +883,8 @@ clopts.attach_option("sample_iter", sample_iter,
   	      << (global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep  << " "
   	      << std::endl;
 
-
+      total_time = ti.current_time();
+      dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
       std::ofstream myfile;
       char fname[20];
       sprintf(fname,"counts_3_profiles.txt");
@@ -891,11 +896,13 @@ clopts.attach_option("sample_iter", sample_iter,
       if(is_new_file) myfile << "#graph\tsample_prob_keep\ttriangles\twedges\tdisc\tempty\truntime" << std::endl;
       myfile << prefix << "\t"
 	     << sample_prob_keep << "\t"
-             << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << "\t"
-             << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3) << "\t"
-             << (global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2) << "\t"
-             << (global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep  << "\t"
-             << ti.current_time() << "\t"
+             << std::setprecision (std::numeric_limits<double>::digits10 + 3)
+             << round((global_counts.num_triangles/3)/pow(sample_prob_keep, 3)) << "\t"
+             << round((global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3)) << "\t"
+             << round((global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2)) << "\t"
+             << round((global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep)  << "\t"
+             << std::setprecision (6)
+             << total_time << "\t"
              << std::endl;
 
       myfile.close();
@@ -912,7 +919,6 @@ clopts.attach_option("sample_iter", sample_iter,
 
     }
     
-    dc.cout() << "Total Runtime: " << ti.current_time() << " sec" << std::endl;  
 
   }//for iterations
 
