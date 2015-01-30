@@ -111,6 +111,9 @@ or implied, of Erik Gorset.
 
 //probability of keeping an edge in the edges sampling process
 double sample_prob_keep = 1;
+double min_prob = 1;
+double max_prob = 1;
+double prob_step = 0.5;
 size_t total_edges = 0;
 int sample_iter = 1;
 
@@ -818,6 +821,12 @@ int main(int argc, char** argv) {
                        "Probability of keeping edge during sampling");
 clopts.attach_option("sample_iter", sample_iter,
                        "Number of sampling iterations (global count)");
+clopts.attach_option("min_prob", min_prob,
+                       "min prob");
+clopts.attach_option("max_prob", max_prob,
+                       "max prob");
+clopts.attach_option("prob_step", prob_step,
+                       "prob step");
 
   if(!clopts.parse(argc, argv)) return EXIT_FAILURE;
   if (prefix == "") {
@@ -856,12 +865,22 @@ clopts.attach_option("sample_iter", sample_iter,
 
   size_t reference_bytes;
   double total_time;
+
+  if(min_prob == max_prob){//i.e., they were not specified by user
+    min_prob = sample_prob_keep;
+    max_prob = sample_prob_keep;
+  }
+
+  double new_sample_prob = min_prob;
+  while(new_sample_prob <= max_prob){
+    sample_prob_keep = new_sample_prob;
+    new_sample_prob += prob_step;  
   //START ITERATIONS HERE
   for (int sit = 0; sit < sample_iter; sit++) {
-
+  
     reference_bytes = dc.network_bytes_sent();
 
-    dc.cout() << "Iteration " << sit+1 << " of " << sample_iter << std::endl;
+    dc.cout() << "Iteration " << sit+1 << " of " << sample_iter << ". current sample prob: " << sample_prob_keep <<std::endl;
 
     graphlab::timer ti;
     
@@ -940,21 +959,9 @@ clopts.attach_option("sample_iter", sample_iter,
       myfile.close();
 
       sprintf(fname,"netw_3_prof_%d.txt",dc.procid());
-      //is_new_file = true;
-      //if (std::ifstream(fname)){
-      //  is_new_file = false;
-     // }
       myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
-      //if(is_new_file) myfile << "#graph\tsample_prob_keep\tcpu_time\tnetwork_bytes" << std::endl;
   
-      double total_compute_time = 0;
-      for (size_t i = 0;i < engine1.per_thread_compute_time.size(); ++i) {
-        total_compute_time += engine1.per_thread_compute_time[i];
-      }
-      for (size_t i = 0;i < engine2.per_thread_compute_time.size(); ++i) {
-        total_compute_time += engine2.per_thread_compute_time[i];
-      }
-      myfile << /*prefix << "\t" << sample_prob_keep << "\t" << total_compute_time << "\t"<<*/ dc.network_bytes_sent() - reference_bytes <<"\n";
+      myfile << dc.network_bytes_sent() - reference_bytes <<"\n";
 
       myfile.close();
 
@@ -972,7 +979,7 @@ clopts.attach_option("sample_iter", sample_iter,
     
 
   }//for iterations
-
+  }//while min/max_prob
 
   //graphlab::stop_metric_server();
 
