@@ -853,9 +853,13 @@ clopts.attach_option("sample_iter", sample_iter,
   dc.cout() << "sample_prob_keep = " << sample_prob_keep << std::endl;
   dc.cout() << "sample_iter = " << sample_iter << std::endl;
 
+
+  size_t reference_bytes;
   double total_time;
   //START ITERATIONS HERE
   for (int sit = 0; sit < sample_iter; sit++) {
+
+    reference_bytes = dc.network_bytes_sent();
 
     dc.cout() << "Iteration " << sit+1 << " of " << sample_iter << std::endl;
 
@@ -932,6 +936,25 @@ clopts.attach_option("sample_iter", sample_iter,
              << std::setprecision (6)
              << total_time
              << std::endl;
+
+      myfile.close();
+
+      sprintf(fname,"netw_3_prof_%d.txt",dc.procid());
+      //is_new_file = true;
+      //if (std::ifstream(fname)){
+      //  is_new_file = false;
+     // }
+      myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
+      //if(is_new_file) myfile << "#graph\tsample_prob_keep\tcpu_time\tnetwork_bytes" << std::endl;
+  
+      double total_compute_time = 0;
+      for (size_t i = 0;i < engine1.per_thread_compute_time.size(); ++i) {
+        total_compute_time += engine1.per_thread_compute_time[i];
+      }
+      for (size_t i = 0;i < engine2.per_thread_compute_time.size(); ++i) {
+        total_compute_time += engine2.per_thread_compute_time[i];
+      }
+      myfile << /*prefix << "\t" << sample_prob_keep << "\t" << total_compute_time << "\t"<<*/ dc.network_bytes_sent() - reference_bytes <<"\n";
 
       myfile.close();
 
