@@ -772,12 +772,11 @@ typedef graphlab::synchronous_engine<triangle_count> engine_type;
  */
 
 size_t get_edge_data(const graph_type::edge_type& e) {
-
-
-
-
-
-  return e.data().n3;
+ 
+ if (e.data().sample_indicator == 1)
+   return e.data().n3;
+ else 
+   return 0;
 }
 
 
