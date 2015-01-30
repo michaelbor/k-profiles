@@ -26,6 +26,7 @@
 #include <graphlab/ui/metrics_server.hpp>
 #include <graphlab/util/hopscotch_set.hpp>
 #include <graphlab/macros_def.hpp>
+#include <limits>
 /**
  *  
  * In this program we implement the "hash-set" version of the
@@ -102,7 +103,7 @@ or implied, of Erik Gorset.
 
 
 //probability of keeping an edge in the edges sampling process
-float sample_prob_keep = 1;
+double sample_prob_keep = 1;
 size_t total_edges = 0;
 int sample_iter = 1;
 
@@ -529,7 +530,9 @@ typedef graphlab::distributed_graph<vertex_data_type,
 
 
 
-
+void init_vertex(graph_type::vertex_type& vertex) {
+  vertex.data().num_triangles = 0;
+}
 
 
 
@@ -655,15 +658,16 @@ public:
 
       if (targetlist.vid_set.size() < srclist.vid_set.size()) {
 
-        edge.data().n3 += count_set_intersect(targetlist.vid_set, srclist.vid_set);
-
+       // edge.data().n3 += count_set_intersect(targetlist.vid_set, srclist.vid_set);
+        edge.data().n3 = count_set_intersect(targetlist.vid_set, srclist.vid_set);  
 
 
       }
 
       else {
 
-        edge.data().n3 += count_set_intersect(srclist.vid_set, targetlist.vid_set);
+       // edge.data().n3 += count_set_intersect(srclist.vid_set, targetlist.vid_set);
+        edge.data().n3 = count_set_intersect(srclist.vid_set, targetlist.vid_set);
 
       }
     }
@@ -897,12 +901,16 @@ clopts.attach_option("sample_iter", sample_iter,
   dc.cout() << "sample_prob_keep = " << sample_prob_keep << std::endl;
   dc.cout() << "sample_iter = " << sample_iter << std::endl;
 
+  double total_time;
   //START ITERATIONS HERE
   for (int sit = 0; sit < sample_iter; sit++) {
 
     dc.cout() << "Iteration " << sit+1 << " of " << sample_iter << std::endl;
 
     graphlab::timer ti;
+    
+    // Initialize the vertex data
+    //graph.transform_vertices(init_vertex);
     
     //Sampling
     graph.transform_edges(sample_edge);
@@ -939,9 +947,29 @@ clopts.attach_option("sample_iter", sample_iter,
             // << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << std::endl;
      //originally, only count triangle when vertices are in 1 order. but must count all if local counts
      // run as if local count and divide by 3 at the end
-     dc.cout() << "Global Triangle count: " << count/3 << std::endl;
-     dc.cout() << "Global count from estimators (edge reduce): " 
+    // dc.cout() << "Global Triangle count: " << count/3 << std::endl;
+      dc.cout() << "Global count from estimators (edge reduce): " 
             << (count/3)/pow(sample_prob_keep, 3) << std::endl;
+
+      total_time = ti.current_time();
+      std::ofstream myfile;
+      char fname[20];
+      sprintf(fname,"counts_triangles.txt");
+      bool is_new_file = true;
+      if (std::ifstream(fname)){
+        is_new_file = false;
+      }
+      myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
+      if(is_new_file) myfile << "#graph\tsample_prob_keep\ttriangles\truntime" << std::endl;
+      myfile << prefix << "\t"
+             << sample_prob_keep << "\t"
+             << std::setprecision (std::numeric_limits<double>::digits10 + 3)
+             << round((count/3)/pow(sample_prob_keep, 3)) << "\t"
+             << std::setprecision (6)
+             << total_time
+             << std::endl;
+
+      myfile.close();
        
     }
     else {
