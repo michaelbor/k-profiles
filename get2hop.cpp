@@ -782,8 +782,6 @@ public:
   }
 
 
-  //remove duplicates here, simply unique???
-
   /*
    * the gather result now contains the vertex IDs in the neighborhood.
    * store it on the vertex. 
@@ -801,12 +799,17 @@ public:
    else {
      vertex.data().two_hop_set.assign(neighborhood.vid_vec);
    }
-   //remove duplicates here, or does vid_set.assign already handle this?
+   //remove duplicates here, or does 
    // std::vector<graphlab::vertex_id_type>::iterator new_end = std::unique(vertex.data().vid_set.begin(),
    //                                         vertex.data().vid_set.end());
    // // vid_vec.erase(new_end, vid_vec.end());
+   //vid_set.assign already removed duplicates
+   //only need to prevent vertex id itself, erase-remove idiom
+   //we could also remove vertices that are already 1 hop away
+   vertex.data().two_hop_set.vid_vec.erase( std::remove( std::begin(vertex.data().two_hop_set.vid_vec), 
+        std::end(vertex.data().two_hop_set.vid_vec), vertex.id() ), std::end(vertex.data().two_hop_set.vid_vec) ); 
+   
    // vertex.data().vid_set.resize(std::distance(vertex.data().vid_set.begin(),newend));
-
    do_not_scatter = vertex.data().two_hop_set.size() == 0;
   } // end of apply
 
@@ -979,22 +982,40 @@ struct save_neighborhoods{
   //          graphlab::tostr(n_followed) + "\t" + 
   //          graphlab::tostr(n_following) + "\n";
   //
-  if ((v.data().vid_set.vid_vec.size() > 3) && (v.data().two_hop_set.vid_vec.size() > 3)) {
-    // if (v.data().vid_set.size() > 0) {
-  return graphlab::tostr(v.id()) + "\n" +
-         // for(int i=0; i<v.data().vid_set.size(); i++){
-          "\t" + graphlab::tostr(v.data().vid_set.vid_vec[3]) + "\n" +
-         // }
-         // "\n" +
-         // for(int i=0; i<v.data().two_hop_set.size(); i++){
-          "\t" + graphlab::tostr(v.data().two_hop_set.vid_vec[3]) + "\n";
-         // }
-         // graphlab::tostr(v.data().num_triangles) + "\t" +
-         // graphlab::tostr(v.data().num_wedges) + "\t" +
-         // graphlab::tostr(v.data().num_disc) + "\t" +
-         // graphlab::tostr(v.data().num_empty) + "\n";
-        }
-        else {return graphlab::tostr(v.id()) + "\t" + graphlab::tostr(v.data().vid_set.size()) + "\n";}
+  
+  // if ((v.data().vid_set.vid_vec.size() > 3) && (v.data().two_hop_set.vid_vec.size() > 3)) {
+  //   // if (v.data().vid_set.size() > 0) {
+  // return graphlab::tostr(v.id()) + "\n" +
+  //        // for(int i=0; i<v.data().vid_set.size(); i++){
+  //         "\t" + graphlab::tostr(v.data().vid_set.vid_vec[3]) + "\n" +
+  //        // }
+  //        // "\n" +
+  //        // for(int i=0; i<v.data().two_hop_set.size(); i++){
+  //         "\t" + graphlab::tostr(v.data().two_hop_set.vid_vec[3]) + "\n";
+  //        // }
+  //        // graphlab::tostr(v.data().num_triangles) + "\t" +
+  //        // graphlab::tostr(v.data().num_wedges) + "\t" +
+  //        // graphlab::tostr(v.data().num_disc) + "\t" +
+  //        // graphlab::tostr(v.data().num_empty) + "\n";
+  //       }
+  //       else {return graphlab::tostr(v.id()) + "\t" + graphlab::tostr(v.data().vid_set.size()) + "\n";}
+  
+  // char buf[1000];
+  std::string buf = graphlab::tostr(v.id()) + "\n";
+  size_t bt;
+  if (v.data().vid_set.vid_vec.size() > 0) {
+    for (bt = 0; bt < v.data().vid_set.vid_vec.size(); bt++){
+      buf += "\t" + graphlab::tostr(v.data().vid_set.vid_vec[bt]);
+    }
+  }
+  buf += "\n";
+  if (v.data().two_hop_set.vid_vec.size() > 0) {
+    for (bt = 0; bt < v.data().two_hop_set.vid_vec.size(); bt++){
+      buf += "\t" + graphlab::tostr(v.data().two_hop_set.vid_vec[bt]);
+    }
+  }
+  buf += "\n";
+  return buf;
   }
   std::string save_edge(graph_type::edge_type e) {
     return "";
