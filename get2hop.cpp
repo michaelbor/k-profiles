@@ -421,7 +421,7 @@ struct edge_data_type {
 // To collect the set of neighbors, we need a message type which is
 // basically a set of vertex IDs
 
-// bool PER_VERTEX_COUNT = false;
+bool PER_VERTEX_COUNT = false;
 
 
 /*
@@ -979,7 +979,7 @@ clopts.attach_option("num_iter", num_iter,
     return EXIT_FAILURE;
   }
 
-  // if (per_vertex != "") PER_VERTEX_COUNT = true;
+  if (per_vertex != "") PER_VERTEX_COUNT = true;
   // Initialize control plane using mpi
   graphlab::mpi_tools::init(argc, argv);
   graphlab::distributed_control dc;
@@ -1075,7 +1075,7 @@ clopts.attach_option("num_iter", num_iter,
       myfile.close();
 
     // }
-    // else {
+    if (PER_VERTEX_COUNT==true) {
       graph.save(per_vertex,
               save_neighborhoods(),
               false, /* no compression */
@@ -1084,7 +1084,7 @@ clopts.attach_option("num_iter", num_iter,
               1); /* one file per machine */
               // clopts.get_ncpus());
 
-    // }
+    }
     
     dc.cout() << "Total Runtime: " << ti.current_time() << " sec" << std::endl;  
 
