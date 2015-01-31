@@ -806,8 +806,8 @@ public:
    //vid_set.assign already removed duplicates
    //only need to prevent vertex id itself, erase-remove idiom
    //we could also remove vertices that are already 1 hop away
-   vertex.data().two_hop_set.vid_vec.erase( std::remove( std::begin(vertex.data().two_hop_set.vid_vec), 
-        std::end(vertex.data().two_hop_set.vid_vec), vertex.id() ), std::end(vertex.data().two_hop_set.vid_vec) ); 
+   vertex.data().two_hop_set.vid_vec.erase( std::remove( vertex.data().two_hop_set.vid_vec.begin(), 
+        vertex.data().two_hop_set.vid_vec.end(), vertex.id() ), vertex.data().two_hop_set.vid_vec.end() ); 
    
    // vertex.data().vid_set.resize(std::distance(vertex.data().vid_set.begin(),newend));
    do_not_scatter = vertex.data().two_hop_set.size() == 0;
