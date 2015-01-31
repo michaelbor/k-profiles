@@ -955,7 +955,7 @@ int main(int argc, char** argv) {
   clopts.attach_option("list_file", per_vertex,
                        "If not empty, will write the 1-hop and 2-hop"
                        "neighborhoods and "
-                       "save to file with prefix \"[per_vertex]\". "
+                       "save to file with prefix \"[per_vertex]\". ");
  // clopts.attach_option("sample_keep_prob", sample_prob_keep,
                        // "Probability of keeping edge during sampling");
 clopts.attach_option("num_iter", num_iter,
