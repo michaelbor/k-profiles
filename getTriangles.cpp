@@ -916,7 +916,7 @@ clopts.attach_option("prob_step", prob_step,
   }
 
   double new_sample_prob = min_prob;
-  while(new_sample_prob <= max_prob){
+  while(new_sample_prob <= max_prob + 0.000000001){
     sample_prob_keep = new_sample_prob;
     new_sample_prob += prob_step;
   //START ITERATIONS HERE
