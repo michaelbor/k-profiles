@@ -1056,7 +1056,7 @@ clopts.attach_option("num_iter", num_iter,
 
 
       std::ofstream myfile;
-      char fname[20];
+      char fname[25];
       sprintf(fname,"2_hop_list_times.txt");
       bool is_new_file = true;
       if (std::ifstream(fname)){
