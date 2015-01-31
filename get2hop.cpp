@@ -108,7 +108,7 @@ or implied, of Erik Gorset.
 //probability of keeping an edge in the edges sampling process
 // float sample_prob_keep = 1;
 // size_t total_edges = 0;
-int sample_iter = 1;
+int num_iter = 1;
 
 void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift) {
     int x, y;
@@ -917,12 +917,14 @@ struct save_neighborhoods{
   std::string buf = graphlab::tostr(v.id()) + "\n";
   size_t bt;
   if (v.data().vid_set.vid_vec.size() > 0) {
+    buf += "1h: ";
     for (bt = 0; bt < v.data().vid_set.vid_vec.size(); bt++){
       buf += "\t" + graphlab::tostr(v.data().vid_set.vid_vec[bt]);
     }
   }
   buf += "\n";
   if (v.data().two_hop_set.vid_vec.size() > 0) {
+    buf += "2h: ";
     for (bt = 0; bt < v.data().two_hop_set.vid_vec.size(); bt++){
       buf += "\t" + graphlab::tostr(v.data().two_hop_set.vid_vec[bt]);
     }
@@ -950,15 +952,13 @@ int main(int argc, char** argv) {
                        "The graph format");
  clopts.attach_option("ht", HASH_THRESHOLD,
                        "Above this size, hash sets are used");
-  clopts.attach_option("per_vertex", per_vertex,
-                       "If not empty, will count the number of "
-                       "triangles each vertex belongs to and "
+  clopts.attach_option("list_file", per_vertex,
+                       "If not empty, will write the 1-hop and 2-hop"
+                       "neighborhoods and "
                        "save to file with prefix \"[per_vertex]\". "
-                       "The algorithm used is slightly different "
-                       "and thus will be a little slower");
  // clopts.attach_option("sample_keep_prob", sample_prob_keep,
                        // "Probability of keeping edge during sampling");
-clopts.attach_option("sample_iter", sample_iter,
+clopts.attach_option("num_iter", num_iter,
                        "Number of sampling iterations (global count)");
 
   if(!clopts.parse(argc, argv)) return EXIT_FAILURE;
@@ -973,8 +973,8 @@ clopts.attach_option("sample_iter", sample_iter,
     return EXIT_FAILURE;
   }
 
-  if ((per_vertex != "") & (sample_iter > 1)) {
-    std::cout << "--multiple iterations for global count only\n";
+  if ((per_vertex != "") & (num_iter > 1)) {
+    std::cout << "--multiple iterations only when no output list\n";
     clopts.print_description();
     return EXIT_FAILURE;
   }
@@ -993,12 +993,12 @@ clopts.attach_option("sample_iter", sample_iter,
             << "Number of edges (before sampling):    " << graph.num_edges() << std::endl;
 
   // dc.cout() << "sample_prob_keep = " << sample_prob_keep << std::endl;
-  dc.cout() << "sample_iter = " << sample_iter << std::endl;
+  dc.cout() << "num_iter = " << num_iter << std::endl;
 
   //START ITERATIONS HERE
-  for (int sit = 0; sit < sample_iter; sit++) {
+  for (int sit = 0; sit < num_iter; sit++) {
 
-    dc.cout() << "Iteration " << sit+1 << " of " << sample_iter << std::endl;
+    dc.cout() << "Iteration " << sit+1 << " of " << num_iter << std::endl;
 
     graphlab::timer ti;
     
