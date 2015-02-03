@@ -106,9 +106,9 @@ or implied, of Erik Gorset.
 */
 
 //probability of keeping an edge in the edges sampling process
-float sample_prob_keep = 1;
+// float sample_prob_keep = 1;
 // size_t total_edges = 0;
-int sample_iter = 1;
+int num_iter = 1;
 
 void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift) {
     int x, y;
@@ -290,7 +290,7 @@ struct counting_inserter {
  * Computes the size of the intersection of two vid_vector's
  */
 // static uint32_t count_set_intersect(
-static size_t count_set_intersect(
+/*static size_t count_set_intersect(
              const vid_vector& smaller_set,
              const vid_vector& larger_set) {
 
@@ -322,38 +322,6 @@ static size_t count_set_intersect(
       i += larger_set.cset->count(vid);
     }
     return i;
-
-  }
-}
-
-/*
-//set_union here??
-static size_t get_set_union(
-             const vid_vector& smaller_set,
-             const vid_vector& larger_set) {
-
-  vid_vector::iterator uit;
-  vid_vector& union_set;
-
-  if (smaller_set.cset == NULL && larger_set.cset == NULL) {
-    counting_inserter<graphlab::vertex_id_type> iter(&i);
-    uit = std::set_union(smaller_set.vid_vec.begin(), smaller_set.vid_vec.end(),
-                          larger_set.vid_vec.begin(), larger_set.vid_vec.end(),
-                          iter);
-    return union_set;
-  }
-  else if (smaller_set.cset == NULL && larger_set.cset != NULL) {
-    return larger_set;
-  }
-  else if (smaller_set.cset != NULL && larger_set.cset == NULL) {
-    return smaller_set;
-  }
-  else {
-    vid_vector::iterator uit;
-    uit = std::set_union(smaller_set.vid_vec.begin(), smaller_set.vid_vec.end(),
-                          larger_set.vid_vec.begin(), larger_set.vid_vec.end(),
-                          iter);
-    return uit;
 
   }
 }
@@ -413,13 +381,13 @@ struct edge_data_type {
   double n2e;
   double n2c;
   double n1;
-  bool sample_indicator;
+  // bool sample_indicator;
   void save(graphlab::oarchive &oarc) const {
     //oarc << vid_set << num_triangles;
-    oarc << n1 << n2 << n2e << n2c << n3 << sample_indicator;
+    oarc << n1 << n2 << n2e << n2c << n3;// << sample_indicator;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> n1 >> n2 >> n2e >> n2c >> n3 >> sample_indicator;
+    iarc >> n1 >> n2 >> n2e >> n2c >> n3;// >> sample_indicator;
   }
 };
 
@@ -453,7 +421,7 @@ struct edge_data_type {
 // To collect the set of neighbors, we need a message type which is
 // basically a set of vertex IDs
 
-// bool PER_VERTEX_COUNT = false;
+bool PER_VERTEX_COUNT = false;
 
 
 /*
@@ -527,63 +495,6 @@ struct set_union_gather {
 //another sets_union_gather to union 2 sets instead of vertex and set?
 //no vertex_id_type
 //or just overload this operator?
-
-/*struct sets_union_gather {
-  graphlab::vertex_id_type v;
-  std::vector<graphlab::vertex_id_type> vid_vec;
-
-  sets_union_gather():v(-1) {
-  }
-
-  size_t size() const {
-    if (v == (graphlab::vertex_id_type)-1) return vid_vec.size();
-    else return 1;
-  }
-  sets_union_gather& operator+=(const sets_union_gather& other) {
-    if (size() == 0) {
-      (*this) = other;
-      return (*this);
-    }
-    else if (other.size() == 0) {
-      return *this;
-    }
-
-    if (vid_vec.size() == 0) {
-      vid_vec.push_back(v);
-      v = (graphlab::vertex_id_type)(-1);
-    }
-    //change to compute the true union, or just remove duplicates at the end/apply???
-    if (other.vid_vec.size() > 0) {
-      size_t ct = vid_vec.size();
-      vid_vec.resize(vid_vec.size() + other.vid_vec.size());
-      for (size_t i = 0; i < other.vid_vec.size(); ++i) {
-        vid_vec[ct + i] = other.vid_vec[i];
-      }
-    }
-    else if (other.v != (graphlab::vertex_id_type)-1) {
-      vid_vec.push_back(other.v);
-    }
-    return *this;
-  }
-  
-  // serialize
-  void save(graphlab::oarchive& oarc) const {
-    oarc << bool(vid_vec.size() == 0);
-    if (vid_vec.size() == 0) oarc << v;
-    else oarc << vid_vec;
-  }
-
-  // deserialize
-  void load(graphlab::iarchive& iarc) {
-    bool novvec;
-    v = (graphlab::vertex_id_type)(-1);
-    vid_vec.clear();
-    iarc >> novvec;
-    if (novvec) iarc >> v;
-    else iarc >> vid_vec;
-  }
-};
-*/
 
 
 
@@ -690,10 +601,12 @@ public:
    * I only need to touch each edge once, so if I scatter just on the
    * out edges, that is sufficient.
    */
+   //change to no scatter
   edge_dir_type scatter_edges(icontext_type& context,
                               const vertex_type& vertex) const {
-    if (do_not_scatter) return graphlab::NO_EDGES;
-    else return graphlab::OUT_EDGES;
+    // if (do_not_scatter) return graphlab::NO_EDGES;
+    // else return graphlab::OUT_EDGES;
+    return graphlab::NO_EDGES;
   }
 
 
@@ -702,33 +615,33 @@ public:
    * adjacent vertices. This is the number of triangles this edge is involved
    * in.
    */
-  void scatter(icontext_type& context,
-              const vertex_type& vertex,
-              edge_type& edge) const {
-    //    vertex_type othervtx = edge.target();
-    // if (edge.data().sample_indicator == 1){
-      const vertex_data_type& srclist = edge.source().data();
-      const vertex_data_type& targetlist = edge.target().data();
-      size_t tmp= 0, tmp2 = 0;
-      if (targetlist.vid_set.size() < srclist.vid_set.size()) {
-        //edge.data() += count_set_intersect(targetlist.vid_set, srclist.vid_set);
-        //will this work with += increment??
-        tmp = count_set_intersect(targetlist.vid_set, srclist.vid_set);
-      }
-      else {
-        //edge.data() += count_set_intersect(srclist.vid_set, targetlist.vid_set);
-        tmp = count_set_intersect(srclist.vid_set, targetlist.vid_set);
-      }
-      tmp2 = srclist.vid_set.size() + targetlist.vid_set.size();
-      edge.data().n3 = tmp;
-      edge.data().n2 =  tmp2 - 2*tmp;
+  // void scatter(icontext_type& context,
+  //             const vertex_type& vertex,
+  //             edge_type& edge) const {
+  //   //    vertex_type othervtx = edge.target();
+  //   // if (edge.data().sample_indicator == 1){
+  //     const vertex_data_type& srclist = edge.source().data();
+  //     const vertex_data_type& targetlist = edge.target().data();
+  //     size_t tmp= 0, tmp2 = 0;
+  //     if (targetlist.vid_set.size() < srclist.vid_set.size()) {
+  //       //edge.data() += count_set_intersect(targetlist.vid_set, srclist.vid_set);
+  //       //will this work with += increment??
+  //       tmp = count_set_intersect(targetlist.vid_set, srclist.vid_set);
+  //     }
+  //     else {
+  //       //edge.data() += count_set_intersect(srclist.vid_set, targetlist.vid_set);
+  //       tmp = count_set_intersect(srclist.vid_set, targetlist.vid_set);
+  //     }
+  //     tmp2 = srclist.vid_set.size() + targetlist.vid_set.size();
+  //     edge.data().n3 = tmp;
+  //     edge.data().n2 =  tmp2 - 2*tmp;
       
-      edge.data().n2c = srclist.vid_set.size() - tmp - 1;
-      edge.data().n2e = targetlist.vid_set.size() - tmp - 1;       
+  //     edge.data().n2c = srclist.vid_set.size() - tmp - 1;
+  //     edge.data().n2e = targetlist.vid_set.size() - tmp - 1;       
 
-      edge.data().n1 = context.num_vertices() - (tmp2 - tmp);
-    // }
-  }
+  //     edge.data().n1 = context.num_vertices() - (tmp2 - tmp);
+  //   // }
+  // }
 };
 
 
@@ -782,8 +695,6 @@ public:
   }
 
 
-  //remove duplicates here, simply unique???
-
   /*
    * the gather result now contains the vertex IDs in the neighborhood.
    * store it on the vertex. 
@@ -801,12 +712,17 @@ public:
    else {
      vertex.data().two_hop_set.assign(neighborhood.vid_vec);
    }
-   //remove duplicates here, or does vid_set.assign already handle this?
+   //remove duplicates here, or does 
    // std::vector<graphlab::vertex_id_type>::iterator new_end = std::unique(vertex.data().vid_set.begin(),
    //                                         vertex.data().vid_set.end());
    // // vid_vec.erase(new_end, vid_vec.end());
+   //vid_set.assign already removed duplicates
+   //only need to prevent vertex id itself, erase-remove idiom
+   //we could also remove vertices that are already 1 hop away
+   vertex.data().two_hop_set.vid_vec.erase( std::remove( vertex.data().two_hop_set.vid_vec.begin(), 
+        vertex.data().two_hop_set.vid_vec.end(), vertex.id() ), vertex.data().two_hop_set.vid_vec.end() ); 
+   
    // vertex.data().vid_set.resize(std::distance(vertex.data().vid_set.begin(),newend));
-
    do_not_scatter = vertex.data().two_hop_set.size() == 0;
   } // end of apply
 
@@ -961,9 +877,9 @@ vertex_data_type get_vertex_data(const graph_type::vertex_type& v) {
 //	return v.data().vid_set.size();
 //}
 
-size_t get_edge_sample_indicator(const graph_type::edge_type& e){
-        return e.data().sample_indicator;
-}
+// size_t get_edge_sample_indicator(const graph_type::edge_type& e){
+//         return e.data().sample_indicator;
+// }
 
 /*
  * A saver which saves a file where each line is a vid / # triangles pair
@@ -979,22 +895,42 @@ struct save_neighborhoods{
   //          graphlab::tostr(n_followed) + "\t" + 
   //          graphlab::tostr(n_following) + "\n";
   //
-  if ((v.data().vid_set.vid_vec.size() > 3) && (v.data().two_hop_set.vid_vec.size() > 3)) {
-    // if (v.data().vid_set.size() > 0) {
-  return graphlab::tostr(v.id()) + "\n" +
-         // for(int i=0; i<v.data().vid_set.size(); i++){
-          "\t" + graphlab::tostr(v.data().vid_set.vid_vec[3]) + "\n" +
-         // }
-         // "\n" +
-         // for(int i=0; i<v.data().two_hop_set.size(); i++){
-          "\t" + graphlab::tostr(v.data().two_hop_set.vid_vec[3]) + "\n";
-         // }
-         // graphlab::tostr(v.data().num_triangles) + "\t" +
-         // graphlab::tostr(v.data().num_wedges) + "\t" +
-         // graphlab::tostr(v.data().num_disc) + "\t" +
-         // graphlab::tostr(v.data().num_empty) + "\n";
-        }
-        else {return graphlab::tostr(v.id()) + "\t" + graphlab::tostr(v.data().vid_set.size()) + "\n";}
+  
+  // if ((v.data().vid_set.vid_vec.size() > 3) && (v.data().two_hop_set.vid_vec.size() > 3)) {
+  //   // if (v.data().vid_set.size() > 0) {
+  // return graphlab::tostr(v.id()) + "\n" +
+  //        // for(int i=0; i<v.data().vid_set.size(); i++){
+  //         "\t" + graphlab::tostr(v.data().vid_set.vid_vec[3]) + "\n" +
+  //        // }
+  //        // "\n" +
+  //        // for(int i=0; i<v.data().two_hop_set.size(); i++){
+  //         "\t" + graphlab::tostr(v.data().two_hop_set.vid_vec[3]) + "\n";
+  //        // }
+  //        // graphlab::tostr(v.data().num_triangles) + "\t" +
+  //        // graphlab::tostr(v.data().num_wedges) + "\t" +
+  //        // graphlab::tostr(v.data().num_disc) + "\t" +
+  //        // graphlab::tostr(v.data().num_empty) + "\n";
+  //       }
+  //       else {return graphlab::tostr(v.id()) + "\t" + graphlab::tostr(v.data().vid_set.size()) + "\n";}
+  
+  // char buf[1000];
+  std::string buf = graphlab::tostr(v.id()) + "\n";
+  size_t bt;
+  if (v.data().vid_set.vid_vec.size() > 0) {
+    buf += "1h: ";
+    for (bt = 0; bt < v.data().vid_set.vid_vec.size(); bt++){
+      buf += "\t" + graphlab::tostr(v.data().vid_set.vid_vec[bt]);
+    }
+  }
+  buf += "\n";
+  if (v.data().two_hop_set.vid_vec.size() > 0) {
+    buf += "2h: ";
+    for (bt = 0; bt < v.data().two_hop_set.vid_vec.size(); bt++){
+      buf += "\t" + graphlab::tostr(v.data().two_hop_set.vid_vec[bt]);
+    }
+  }
+  buf += "\n";
+  return buf;
   }
   std::string save_edge(graph_type::edge_type e) {
     return "";
@@ -1016,15 +952,13 @@ int main(int argc, char** argv) {
                        "The graph format");
  clopts.attach_option("ht", HASH_THRESHOLD,
                        "Above this size, hash sets are used");
-  clopts.attach_option("per_vertex", per_vertex,
-                       "If not empty, will count the number of "
-                       "triangles each vertex belongs to and "
-                       "save to file with prefix \"[per_vertex]\". "
-                       "The algorithm used is slightly different "
-                       "and thus will be a little slower");
- clopts.attach_option("sample_keep_prob", sample_prob_keep,
-                       "Probability of keeping edge during sampling");
-clopts.attach_option("sample_iter", sample_iter,
+  clopts.attach_option("list_file", per_vertex,
+                       "If not empty, will write the 1-hop and 2-hop"
+                       "neighborhoods and "
+                       "save to file with prefix \"[per_vertex]\". ");
+ // clopts.attach_option("sample_keep_prob", sample_prob_keep,
+                       // "Probability of keeping edge during sampling");
+clopts.attach_option("num_iter", num_iter,
                        "Number of sampling iterations (global count)");
 
   if(!clopts.parse(argc, argv)) return EXIT_FAILURE;
@@ -1039,13 +973,13 @@ clopts.attach_option("sample_iter", sample_iter,
     return EXIT_FAILURE;
   }
 
-  if ((per_vertex != "") & (sample_iter > 1)) {
-    std::cout << "--multiple iterations for global count only\n";
+  if ((per_vertex != "") & (num_iter > 1)) {
+    std::cout << "--multiple iterations only when no output list\n";
     clopts.print_description();
     return EXIT_FAILURE;
   }
 
-  // if (per_vertex != "") PER_VERTEX_COUNT = true;
+  if (per_vertex != "") PER_VERTEX_COUNT = true;
   // Initialize control plane using mpi
   graphlab::mpi_tools::init(argc, argv);
   graphlab::distributed_control dc;
@@ -1058,13 +992,13 @@ clopts.attach_option("sample_iter", sample_iter,
   dc.cout() << "Number of vertices: " << graph.num_vertices() << std::endl
             << "Number of edges (before sampling):    " << graph.num_edges() << std::endl;
 
-  dc.cout() << "sample_prob_keep = " << sample_prob_keep << std::endl;
-  dc.cout() << "sample_iter = " << sample_iter << std::endl;
+  // dc.cout() << "sample_prob_keep = " << sample_prob_keep << std::endl;
+  dc.cout() << "num_iter = " << num_iter << std::endl;
 
   //START ITERATIONS HERE
-  for (int sit = 0; sit < sample_iter; sit++) {
+  for (int sit = 0; sit < num_iter; sit++) {
 
-    dc.cout() << "Iteration " << sit+1 << " of " << sample_iter << std::endl;
+    dc.cout() << "Iteration " << sit+1 << " of " << num_iter << std::endl;
 
     graphlab::timer ti;
     
@@ -1108,9 +1042,9 @@ clopts.attach_option("sample_iter", sample_iter,
     // if (PER_VERTEX_COUNT == false) {
       // vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
-      size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
+      // size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
       //size_t denom = 1;
-      dc.cout() << "denominator: " << denom << std::endl;
+      // dc.cout() << "denominator: " << denom << std::endl;
       //dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
       //dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
       // dc.cout() << "Global count from estimators: " 
@@ -1122,14 +1056,14 @@ clopts.attach_option("sample_iter", sample_iter,
 
 
       std::ofstream myfile;
-      char fname[20];
+      char fname[25];
       sprintf(fname,"2_hop_list_times.txt");
       bool is_new_file = true;
       if (std::ifstream(fname)){
         is_new_file = false;
       }
       myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
-      if(is_new_file) myfile << "#graph\tsample_prob_keep\ttriangles\twedges\tdisc\tempty\truntime" << std::endl;
+      if(is_new_file) myfile << "#graph\truntime" << std::endl;
       myfile << prefix << "\t"
              // << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << "\t"
              // << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3) << "\t"
@@ -1141,7 +1075,7 @@ clopts.attach_option("sample_iter", sample_iter,
       myfile.close();
 
     // }
-    // else {
+    if (PER_VERTEX_COUNT==true) {
       graph.save(per_vertex,
               save_neighborhoods(),
               false, /* no compression */
@@ -1150,7 +1084,7 @@ clopts.attach_option("sample_iter", sample_iter,
               1); /* one file per machine */
               // clopts.get_ncpus());
 
-    // }
+    }
     
     dc.cout() << "Total Runtime: " << ti.current_time() << " sec" << std::endl;  
 
