@@ -119,7 +119,7 @@ double prob_step = 0.5;
 size_t total_edges = 0;
 int sample_iter = 1;
 
-#define USIZE 10 
+#define USIZE 11 
 
 void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift) {
     int x, y;
@@ -338,6 +338,53 @@ static size_t count_set_intersect(
 }
 
 
+#ifdef DOUBLE_COUNTERS
+class uvec {
+public:
+  double value[USIZE];
+  double& operator[](int i){
+    if( i > USIZE ){
+      std::cout << "Index out of bounds" <<std::endl;
+      return value[0];
+    }
+    return value[i];
+  }
+  const double& operator[](int i) const {
+    if( i > USIZE ){
+      std::cout << "Index out of bounds" <<std::endl;
+      return value[0];
+    }
+    return value[i];
+  }
+  double operator*(const uvec& b) {
+    double sum = 0;
+    for (int i = 0; i < USIZE; ++i){
+      sum += value[i]*b.value[i];
+    }
+    return sum;
+  }
+  uvec& operator+=(const uvec& b){
+    for (int i = 0; i < USIZE; ++i){
+      value[i] += b.value[i];
+    }
+    return *this;
+  }
+  
+  void save(graphlab::oarchive& oarc) const {
+    for (int i = 0; i < USIZE; ++i)
+      oarc << value[i];
+  }
+
+  void load(graphlab::iarchive& iarc) {
+    for(int i = 0; i < USIZE; ++i){
+        iarc >> value[i];
+    }
+  }
+
+
+};
+
+#else
 // The class hat is used to manipulate vectors written by Ethan.
 class uvec {
 private:
@@ -383,13 +430,32 @@ public:
     return *this;
   }
 
-};
+  void save(graphlab::oarchive& oarc) const {
+    for (int i = 0; i < USIZE; ++i)
+      oarc << value[i];
+  }
 
-// 4-PROFILE CHANGES - NEW STRUCTURE.
+  void load(graphlab::iarchive& iarc) {
+    for(int i = 0; i < USIZE; ++i){
+        iarc >> value[i];
+    }
+  }
+
+
+};
+#endif
+
+
+//  4-PROFILE CHANGES - NEW STRUCTURE.
 
 struct idcount {
  graphlab::vertex_id_type vert_id;
  size_t count;
+// Code to serialize and deserialize the structure. But not sure if this right ! 
+ void save(graphlab::oarchive &oarc) const {
+    oarc << vert_id << count; }
+  void load(graphlab::iarchive &iarc) {
+    iarc >> vert_id>>count; }
 };
 
 bool compare_idcount (const idcount& a, const idcount& b){	
@@ -439,10 +505,10 @@ struct vertex_data_type {
   }
   
   void save(graphlab::oarchive &oarc) const {
-    oarc << vid_set << num_triangles << num_wedges << num_wedges_e << num_wedges_c << num_disc << num_empty<<num_disc_d;
+    oarc << vid_set << num_triangles << num_wedges << num_wedges_e << num_wedges_c << num_disc << num_empty<<num_disc_d << u;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> vid_set >> num_triangles >> num_wedges >> num_wedges_e >> num_wedges_c >> num_disc >>num_empty>>num_disc_d;
+    iarc >> vid_set >> num_triangles >> num_wedges >> num_wedges_e >> num_wedges_c >> num_disc >>num_empty>>num_disc_d >> u;
   }
 };
 
@@ -463,20 +529,23 @@ struct edge_data_type {
   double n2e;
   double n2c;
   double n1;
+  double eqn10_const;// new variable - 4- PROFILE for the 10th equation
 #else
   size_t n3;
   size_t n2;
   size_t n2e;
   size_t n2c;
   size_t n1;
+  long int eqn10_const; // not sure if the constant in H2,H7,H9,H10 equation can be
+// negative or not
 #endif
 
   bool sample_indicator;
   void save(graphlab::oarchive &oarc) const {
-    oarc << n1 << n2 << n2e << n2c << n3 << sample_indicator;
+    oarc << n1 << n2 << n2e << n2c << n3 << sample_indicator<<eqn10_const;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> n1 >> n2 >> n2e >> n2c >> n3 >> sample_indicator;
+    iarc >> n1 >> n2 >> n2e >> n2c >> n3 >> sample_indicator>>eqn10_const;
   }
 };
 
@@ -572,18 +641,33 @@ struct edge_sum_gather {
      }
    
     
-                 
+                   
+
+
   
     return *this;
   }
 
   // serialize
   void save(graphlab::oarchive& oarc) const {
+    
+    size_t num = b.size();
+    oarc << num;
+    std::list<idcount>::const_iterator it;
+    for (it = b.begin(); it != b.end(); ++it)
+      oarc << *it;
     oarc << n1 << n2 << n2e << n2c << n3<<n1_double<<n2c_double<<n3_double<<n1_n2c<<n1_n3<<n2c_n2e<<n2c_n3;
   }
 
-  // deserialize
   void load(graphlab::iarchive& iarc) {
+    size_t num = 0;
+    b.clear();
+    iarc >> num;
+    for(size_t a = 0; a < num; ++a){
+	idcount element;
+        iarc >> element;
+        b.push_back(element);
+    }
     iarc >> n1 >> n2 >> n2e >> n2c >> n3>>n1_double>>n2c_double>>n3_double>>n1_n2c>>n1_n3>>n2c_n2e>>n2c_n3;
   }
 };
@@ -682,6 +766,13 @@ void init_vertex(graph_type::vertex_type& vertex) {
 
 
 void sample_edge(graph_type::edge_type& edge) {
+  
+  edge.data().n3 = 0;
+  edge.data().n2 = 0;
+  edge.data().n2e = 0;
+  edge.data().n2c = 0;
+  edge.data().n1 = 0;
+  edge.data().eqn10_const = 0;
   
   if(graphlab::random::rand01() < sample_prob_keep)   
     edge.data().sample_indicator = 1;
@@ -844,6 +935,7 @@ public:
       gather.n1_n3=edge.data().n1*edge.data().n3;
       gather.n2c_n2e=edge.data().n2c*edge.data().n2e;
     
+      std::cout << "edge.data().n2e = "<<edge.data().n2e<<" edge.data().n2c = "<<edge.data().n2c<<"\n";
       if (vertex.id() == edge.source().id()){
         gather.n2e = edge.data().n2e;
         gather.n2c = edge.data().n2c;
@@ -854,10 +946,12 @@ public:
       
         const vertex_data_type& targetlist = edge.target().data();
         for (size_t i=0; i<targetlist.vid_set.size();i++){
+         if (targetlist.vid_set.vid_vec.at(i)!= edge.source().id()){
           idcount dum;
           dum.vert_id=targetlist.vid_set.vid_vec.at(i); // assigning the id of the structure to that of the ith neighbor.
           dum.count=1;
           gather.b.push_back(dum);// push it in the list
+        } // doing this only for all neighbors of the target thats not the source. 
         }
    
       }
@@ -870,10 +964,12 @@ public:
           // Now the list b (inside gather structure)  consisting of neighbors of target and count of 1 for each has to be populated.
         const vertex_data_type& srclist = edge.source().data();
         for (size_t i=0; i<srclist.vid_set.size();i++){
+          if (srclist.vid_set.vid_vec.at(i)!= edge.target().id()){
           idcount dum;
           dum.vert_id=srclist.vid_set.vid_vec.at(i); // assigning the id of the structure to that of the ith neighbor.
           dum.count=1;
           gather.b.push_back(dum);// push it in the list
+         } // doing this only for all neighbors for the src that is not the target. 
         }
   
       }
@@ -944,7 +1040,7 @@ public:
        vid_vector dummy; // create a vid_vector out of this vec 1 for uses with count_set_intersect
        dummy.assign(vec1);       
        if (  count_set_intersect(dummy,vertex.data().vid_set)== 0 ){
-         vertex.data().u[8]+= (it->count* (it->count))/2; // doing count choose 2 if the id is not the vertex neighbor.         
+         vertex.data().u[8]+= (it->count* (it->count - 1))/2; // doing count choose 2 if the id is not the vertex neighbor.         
         }
  
      }
@@ -953,12 +1049,32 @@ public:
  // vertex.data().vid_set.clear(); //still necessary??    
   }
 
-  // No scatter
+  //4-PROFILE CHANGE - now including a new scatter function for the 
+  // equation involving H2,H7,H9 and H10.
   edge_dir_type scatter_edges(icontext_type& context,
                              const vertex_type& vertex) const {
-    return graphlab::NO_EDGES;
+    return graphlab::OUT_EDGES; // we want scatter on the out-edges
   }
+ 
+   void scatter(icontext_type& context,
+              const vertex_type& vertex,
+              edge_type& edge) const {
+    //    vertex_type othervtx = edge.target();
+    if (edge.data().sample_indicator == 1){
+      const vertex_data_type& srclist = edge.source().data();
+      const vertex_data_type& targetlist = edge.target().data();
+      // H2(CD) = |E|-x-1. x = Gamma(C)-1 + Gamma(D) -1 + n_{2,C}^{e}-n_{2,CD}^e +n_{2,D}^e-
+      // n_{2,DC}^e+n_{3,C}+n_{3,D} -2*n_{3,CD} - H_7(CD)-H_9(CD)-H_10(CD)
+      // Therefore, the constant is given by the RHS.
+      //  H2(CD)-H_7(CD)-H9(CD)-H10(CD)= |E|-( Gamma(C)-1 + Gamma(D) -1 + n_{2,C}^{e}-n_{2,CD}^e +n_{2,D}^e-
+      // n_{2,DE}^e+n_{3,C}+n_{3,D} -2*n_{3,CD} ) -1.C- src, D-target
+      double x=0;
+      x= srclist.vid_set.size() -1 +targetlist.vid_set.size()-1+srclist.num_wedges_e+targetlist.num_wedges_e - edge.data().n2e- edge.data().n2c+srclist.num_triangles+targetlist.num_triangles-2*edge.data().n3;
+      edge.data().eqn10_const= total_edges - 1 -x;
+      std::cout << "edge eqn10_const is: "<<edge.data().eqn10_const<<" "<<srclist.vid_set.size()<<" "<<targetlist.vid_set.size()<<" "<<srclist.num_wedges_e<<" "<<targetlist.num_wedges_e<<" "<<edge.data().n2e<<" "<<edge.data().n2c<<" "<<srclist.num_triangles<<"\n";
 
+    }
+  } 
 
 };
 
@@ -983,6 +1099,10 @@ vertex_data_type get_vertex_data(const graph_type::vertex_type& v) {
 
 size_t get_edge_sample_indicator(const graph_type::edge_type& e){
         return e.data().sample_indicator;
+}
+
+double get_eqn10_const(const graph_type::edge_type& e){
+	return (double)(e.data().eqn10_const);
 }
 
 /*
@@ -1140,48 +1260,97 @@ clopts.attach_option("prob_step", prob_step,
     if (PER_VERTEX_COUNT == false) {
       vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
-      //size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
-      //size_t denom = 1;
-      //dc.cout() << "denominator: " << denom << std::endl;
-    //  dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
-      //dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
-      dc.cout() << "Global count from estimators: " 
+      dc.cout() << "Global count from estimators for 3-profiles: " 
   	      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
   	      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
    	      << (global_counts.num_disc/3)/sample_prob_keep - (1-sample_prob_keep)*(global_counts.num_wedges/3)/pow(sample_prob_keep, 2) << " "
   	      << (global_counts.num_empty/3)-(1-sample_prob_keep)*(global_counts.num_disc/3)/sample_prob_keep  << " "
   	      << std::endl;
 
+
+  // ADDING 4-PROFILE STUFF HERE.
+
+      double n4final[11] = {}; // This is for accumulating global 4-profiles.
+      double denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2)*(graph.num_vertices()-3))/24.; //normalize by |V| choose 4
+      global_counts.u[10] = denom; // the first 8 u's correspond to the 8 equations+ 9th equation is ethan's+ 10th equation needs to be assigned+11th is assigned (the one above) the sum of all counts. (V choose 4)
+     
+       // u [9] needs to be assigned the mapreduce of all eqn10_const variable from edge data.
+      global_counts.u[9] = graph.map_reduce_edges<double>(get_eqn10_const);
+     
+
+      // Now the 11 rows of the inverse matrix is given below. - NEEDS TO BE CORRECTED !!!!
+      uvec A0 = {{-24, -16, -2, -24, -8, -10, -13, 10, 12, 4, 48}};
+      uvec A1 = {{4, 0, -2, 0, 0, 2, 1, -2, -8, -4, 0}};
+      uvec A2 = {{0, 0, 2, 0, 0, -2, -1, 2, 8, 4, 0}};
+      uvec A3 = {{0, 0, 2, 2, 0, 0, 1, -2, 4, 4, 0}};
+      uvec A4 = {{0, 0, -2, 0, 0, 0, -1, 2, -4, -4, 0}};
+      uvec A5 = {{0, 0, -2, 0, 2, -2, -3, 2, 0, -4, 0}};
+      uvec A6 = {{0, 4, -2, 0, 0, -2, -3, 2, 0, -4, 0}};
+      uvec A7 = {{0, 0, 2, 0, 0, 2, 1, -2, 4, 4, 0}};
+      uvec A8 = {{0, 0, 2, 0, 0, 2, 3, -2, 0, 4, 0}};
+      uvec A9 = {{0, 0, -2, 0, 0, -2, -1, 2, 0, -4, 0}};
+      uvec A10 = {{0, 0, 6, 0, 0, 2, 1, -2, 0, 4, 0}};
+     
+      // Operate Ai's on global_counts.u  
+      n4final[0] = (global_counts.u * A0) / 48.;
+      n4final[1] = (global_counts.u * A1) / 8.;
+      n4final[2] = (global_counts.u * A2) / 16.;
+      n4final[3] = (global_counts.u * A3) / 4.;
+      n4final[4] = (global_counts.u * A4) / 4.;
+      n4final[5] = (global_counts.u * A5) / 12.;
+      n4final[6] = (global_counts.u * A6) / 12.;
+      n4final[7] = (global_counts.u * A7) / 16.;
+      n4final[8] = (global_counts.u * A8) / 4.;
+      n4final[9] = (global_counts.u * A9) / 8.;
+      n4final[10] = (global_counts.u * A10) / 48.;    
+
+    
+      // DISPLAY STUFF.
+      dc.cout() << "Global count of 4-profiles: "<<std::endl;
+      for(int i=0; i<11; i++){
+        dc.cout() << std::setprecision (std::numeric_limits<double>::digits10 + 3) << n4final[i] << " ";
+      }
+      dc.cout() << std::endl;
+      dc.cout() << "Global u: ";
+      for(int i=0; i<USIZE; i++){
+        dc.cout() << global_counts.u[i] << " ";
+      }
+      dc.cout() << std::endl;
+
       total_time = ti.current_time();
       dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
       std::ofstream myfile;
       char fname[20];
-      sprintf(fname,"counts_3_profiles.txt");
+      sprintf(fname,"counts_4_profiles.txt");
       bool is_new_file = true;
       if (std::ifstream(fname)){
         is_new_file = false;
       }
       myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
-      if(is_new_file) myfile << "#graph\tsample_prob_keep\ttriangles\twedges\tdisc\tempty\truntime" << std::endl;
+      if(is_new_file) myfile << "#graph\tsample_prob_keep\t3-profiles(4)\t4-profiles(11)\truntime" << std::endl;
       myfile << prefix << "\t"
-	     << sample_prob_keep << "\t"
+             << sample_prob_keep << "\t"
              << std::setprecision (std::numeric_limits<double>::digits10 + 3)
              << round((global_counts.num_triangles/3)/pow(sample_prob_keep, 3)) << "\t"
              << round((global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3)) << "\t"
              << round((global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2)) << "\t"
-             << round((global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep)  << "\t"
-             << std::setprecision (6)
+             << round((global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep)  << "\t";
+
+      for(int i=0; i<11; i++)
+        myfile << n4final[i] <<"\t";
+
+      myfile  << std::setprecision (6)
              << total_time
              << std::endl;
 
       myfile.close();
 
-      sprintf(fname,"netw_3_prof_%d.txt",dc.procid());
+      sprintf(fname,"netw_4_prof_%d.txt",dc.procid());
       myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
-  
       myfile << dc.network_bytes_sent() - reference_bytes <<"\n";
-
       myfile.close();
+
+
 
     }
     else {
