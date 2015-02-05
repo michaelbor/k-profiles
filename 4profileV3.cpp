@@ -1305,11 +1305,34 @@ clopts.attach_option("prob_step", prob_step,
       // n4final[10] = (global_counts.u * A10) / 1.;    
       n4final[10] = global_counts.u[9];
 
-    
+      double n4finalEst[11] = {};
+      //round or dont initialize as double?
+      //probably should have done another inner product...
+      n4finalEst[0] = round(n4final[0] - (1-sample_prob_keep)/sample_prob_keep*n4final[1]);
+      n4finalEst[1] = round(n4final[1]/sample_prob_keep - (1-sample_prob_keep)/pow(sample_prob_keep,2)*(n4final[2] + n4final[3]));
+      n4finalEst[2] = round(n4final[2]/pow(sample_prob_keep,2) - (1-sample_prob_keep)/(3*pow(sample_prob_keep,3))*n4final[4] - 
+                        pow(1-sample_prob_keep,2)/(3*pow(sample_prob_keep,4))*n4final[7] - pow(1-sample_prob_keep,3)/(15*pow(sample_prob_keep,5))*n4final[9]);
+      n4finalEst[3] = round(n4final[3]/pow(sample_prob_keep,2) - 2*(1-sample_prob_keep)/(3*pow(sample_prob_keep,3))*n4final[4] - 
+                        (1-sample_prob_keep)/pow(sample_prob_keep,3)*(n4final[5]+n4final[6]) + 
+                        pow(1-sample_prob_keep,2)/(3*pow(sample_prob_keep,4))*n4final[7] - pow(1-sample_prob_keep,3)/(15*pow(sample_prob_keep,5))*n4final[9]);
+      n4finalEst[4] = round(n4final[4]/pow(sample_prob_keep,3) - (1-sample_prob_keep)/(2*pow(sample_prob_keep,4))*n4final[8] - 
+                        pow(1-sample_prob_keep,2)/(5*pow(sample_prob_keep,5))*n4final[9]);
+      n4finalEst[5] = round(n4final[5]/pow(sample_prob_keep,3) - (1-sample_prob_keep)/(4*pow(sample_prob_keep,4))*n4final[8]);
+      n4finalEst[6] = round(n4final[6]/pow(sample_prob_keep,3) - (1-sample_prob_keep)/pow(sample_prob_keep,4)*n4final[7] - 
+                        (1-sample_prob_keep)/(4*pow(sample_prob_keep,4))*n4final[8] + pow(1-sample_prob_keep,2)/(5*pow(sample_prob_keep,5))*n4final[9]);
+      n4finalEst[7] = round(n4final[7]/pow(sample_prob_keep,4) - (1-sample_prob_keep)/(5*pow(sample_prob_keep,5))*n4final[9]);
+      n4finalEst[8] = round(n4final[8]/pow(sample_prob_keep,4) - 4*(1-sample_prob_keep)/(5*pow(sample_prob_keep,5))*n4final[9]);
+      n4finalEst[9] = round(n4final[9]/pow(sample_prob_keep,5) - (1-sample_prob_keep)/pow(sample_prob_keep,6)*n4final[10]);
+      n4finalEst[10] = round(n4final[10]/pow(sample_prob_keep,6));
+
       // DISPLAY STUFF.
       dc.cout() << "Global count of 4-profiles: "<<std::endl;
       for(int i=0; i<11; i++){
         dc.cout() << std::setprecision (std::numeric_limits<double>::digits10 + 3) << n4final[i] << " ";
+      }
+      dc.cout() << "Global count from estimators: "<<std::endl;
+      for(int i=0; i<11; i++){
+        dc.cout() << std::setprecision (std::numeric_limits<double>::digits10 + 3) << n4finalEst[i] << " ";
       }
       dc.cout() << std::endl;
       dc.cout() << "Global u: ";
@@ -1338,7 +1361,8 @@ clopts.attach_option("prob_step", prob_step,
              << round((global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep)  << "\t";
 
       for(int i=0; i<11; i++)
-        myfile << n4final[i] <<"\t";
+        // myfile << n4final[i] <<"\t";
+        myfile << n4finalEst[i] <<"\t";
 
       myfile  << std::setprecision (6)
              << total_time
