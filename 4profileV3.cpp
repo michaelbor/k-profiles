@@ -1279,30 +1279,31 @@ clopts.attach_option("prob_step", prob_step,
      
 
       // Now the 11 rows of the inverse matrix is given below. - NEEDS TO BE CORRECTED !!!!
-      uvec A0 = {{-24, -16, -2, -24, -8, -10, -13, 10, 12, 4, 48}};
-      uvec A1 = {{4, 0, -2, 0, 0, 2, 1, -2, -8, -4, 0}};
-      uvec A2 = {{0, 0, 2, 0, 0, -2, -1, 2, 8, 4, 0}};
-      uvec A3 = {{0, 0, 2, 2, 0, 0, 1, -2, 4, 4, 0}};
-      uvec A4 = {{0, 0, -2, 0, 0, 0, -1, 2, -4, -4, 0}};
-      uvec A5 = {{0, 0, -2, 0, 2, -2, -3, 2, 0, -4, 0}};
-      uvec A6 = {{0, 4, -2, 0, 0, -2, -3, 2, 0, -4, 0}};
-      uvec A7 = {{0, 0, 2, 0, 0, 2, 1, -2, 4, 4, 0}};
-      uvec A8 = {{0, 0, 2, 0, 0, 2, 3, -2, 0, 4, 0}};
-      uvec A9 = {{0, 0, -2, 0, 0, -2, -1, 2, 0, -4, 0}};
-      uvec A10 = {{0, 0, 6, 0, 0, 2, 1, -2, 0, 4, 0}};
+      uvec A0 = {{-12, -8, -4, -12, -4, -6, -7, 6, 6, 24, 24}};
+      uvec A1 = {{2, 0, 2, 0, 0, 2, 1, -2, -4, -24, 0}};
+      uvec A2 = {{0, 0, -2, 0, 0, -2, -1, 2, 4, 24, 0}};
+      uvec A3 = {{0, 0, -2, 1, 0, -1, 0, 0, 2, 24, 0}};
+      uvec A4 = {{0, 0, 2, 0, 0, 1, 0, 0, -2, -24, 0}};
+      uvec A5 = {{0, 0, 2, 0, 1, 0, -1, 0, 0, -24, 0}};
+      uvec A6 = {{0, 2, 2, 0, 0, 0, -1, 0, 0, -24, 0}};
+      uvec A7 = {{0, 0, -1, 0, 0, 0, 0, 0, 1, 12, 0}};
+      uvec A8 = {{0, 0, -2, 0, 0, 0, 1, 0, 0, 24, 0}};
+      uvec A9 = {{0, 0, 1, 0, 0, 0, 0, 0, 0, -12, 0}};
+      // uvec A10 = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0}};
      
       // Operate Ai's on global_counts.u  
-      n4final[0] = (global_counts.u * A0) / 48.;
-      n4final[1] = (global_counts.u * A1) / 8.;
-      n4final[2] = (global_counts.u * A2) / 16.;
-      n4final[3] = (global_counts.u * A3) / 4.;
-      n4final[4] = (global_counts.u * A4) / 4.;
-      n4final[5] = (global_counts.u * A5) / 12.;
-      n4final[6] = (global_counts.u * A6) / 12.;
-      n4final[7] = (global_counts.u * A7) / 16.;
-      n4final[8] = (global_counts.u * A8) / 4.;
-      n4final[9] = (global_counts.u * A9) / 8.;
-      n4final[10] = (global_counts.u * A10) / 48.;    
+      n4final[0] = (global_counts.u * A0) / 24.;
+      n4final[1] = (global_counts.u * A1) / 4.;
+      n4final[2] = (global_counts.u * A2) / 8.;
+      n4final[3] = (global_counts.u * A3) / 2.;
+      n4final[4] = (global_counts.u * A4) / 2.;
+      n4final[5] = (global_counts.u * A5) / 6.;
+      n4final[6] = (global_counts.u * A6) / 6.;
+      n4final[7] = (global_counts.u * A7) / 4.;
+      n4final[8] = (global_counts.u * A8) / 2.;
+      n4final[9] = (global_counts.u * A9) / 2.;
+      // n4final[10] = (global_counts.u * A10) / 1.;    
+      n4final[10] = global_counts.u[9];
 
     
       // DISPLAY STUFF.
