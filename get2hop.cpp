@@ -106,9 +106,12 @@ or implied, of Erik Gorset.
 */
 
 //probability of keeping an edge in the edges sampling process
-// float sample_prob_keep = 1;
-// size_t total_edges = 0;
-int num_iter = 1;
+double sample_prob_keep = 1;
+double min_prob = 1;
+double max_prob = 1;
+double prob_step = 0.5;
+size_t total_edges = 0;
+int sample_iter = 1;
 
 void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift) {
     int x, y;
@@ -381,13 +384,13 @@ struct edge_data_type {
   double n2e;
   double n2c;
   double n1;
-  // bool sample_indicator;
+  bool sample_indicator;
   void save(graphlab::oarchive &oarc) const {
     //oarc << vid_set << num_triangles;
-    oarc << n1 << n2 << n2e << n2c << n3;// << sample_indicator;
+    oarc << n1 << n2 << n2e << n2c << n3 << sample_indicator;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> n1 >> n2 >> n2e >> n2c >> n3;// >> sample_indicator;
+    iarc >> n1 >> n2 >> n2e >> n2c >> n3 >> sample_indicator;
   }
 };
 
@@ -506,23 +509,25 @@ typedef graphlab::distributed_graph<vertex_data_type,
 
 
 // //move init outside constructor (must be declared after graph_type)
-// void init_vertex(graph_type::vertex_type& vertex) { 
+void init_vertex(graph_type::vertex_type& vertex) { 
 //   vertex.data().num_triangles = 0; 
 //   vertex.data().num_wedges = 0;
 //   vertex.data().num_wedges_e = 0;
 //   vertex.data().num_wedges_c = 0; 
 //   vertex.data().num_disc = 0; 
 //   vertex.data().num_empty = 0;
-// }
+     
+     vertex.data().two_hop_set.clear();
+     vertex.data().vid_set.clear();
+}
 
 
-// void sample_edge(graph_type::edge_type& edge) {
-  
-//   if(graphlab::random::rand01() < sample_prob_keep)   
-//     edge.data().sample_indicator = 1;
-//   else
-//     edge.data().sample_indicator = 0;
-// }
+  void sample_edge(graph_type::edge_type& edge) {
+     if(graphlab::random::rand01() < sample_prob_keep)   
+       edge.data().sample_indicator = 1;
+     else
+       edge.data().sample_indicator = 0;
+  }
 
 
 /*
@@ -554,10 +559,10 @@ public:
                      const vertex_type& vertex,
                      edge_type& edge) const {
     set_union_gather gather;
-    // if(edge.data().sample_indicator == 0){
-    //   gather.v = -1; 
-    // }
-    // else{
+    if(edge.data().sample_indicator == 0){
+       gather.v = -1; 
+     }
+     else{
       graphlab::vertex_id_type otherid = edge.target().id() == vertex.id() ?
                                        edge.source().id() : edge.target().id();
 
@@ -572,7 +577,7 @@ public:
       // std::cout << "THIS ID: " << vertex.id() << " OTHER ID: " << otherid << "\n";
       gather.v = otherid; //will this work? what is v??
     //} 
-   // } 
+   } 
    return gather;
   }
 
@@ -671,10 +676,10 @@ public:
                      const vertex_type& vertex,
                      edge_type& edge) const {
     set_union_gather gather;
-    // if(edge.data().sample_indicator == 0){
-      // gather.v = -1; 
-    // }
-    // else{
+    if(edge.data().sample_indicator == 0){
+       gather.v = -1; 
+    }
+    else{
       vid_vector othernbh = edge.target().id() == vertex.id() ?
                                        edge.source().data().vid_set : edge.target().data().vid_set;
 
@@ -682,7 +687,7 @@ public:
     //     (edge.source().num_in_edges() + edge.source().num_out_edges()): 
     //     (edge.target().num_in_edges() + edge.target().num_out_edges());
 
-    // size_t my_nbrs = vertex.num_in_edges() + vertex.num_out_edges();
+    /// size_t my_nbrs = vertex.num_in_edges() + vertex.num_out_edges();
 
     //if (PER_VERTEX_COUNT || (other_nbrs > my_nbrs) || (other_nbrs == my_nbrs && otherid > vertex.id())) {
     //if (PER_VERTEX_COUNT || otherid > vertex.id()) {
@@ -690,7 +695,7 @@ public:
       // std::cout << "2 HOP SIZE: " << othernbh.size() << "\n";
       gather.vid_vec = othernbh.vid_vec; //will this work? what is v?? vid_vec regardless of cuckoo hash?
     //} 
-   // } 
+    } 
    return gather;
   }
 
@@ -877,9 +882,9 @@ vertex_data_type get_vertex_data(const graph_type::vertex_type& v) {
 //	return v.data().vid_set.size();
 //}
 
-// size_t get_edge_sample_indicator(const graph_type::edge_type& e){
-//         return e.data().sample_indicator;
-// }
+  size_t get_edge_sample_indicator(const graph_type::edge_type& e){
+           return e.data().sample_indicator;
+   }
 
 /*
  * A saver which saves a file where each line is a vid / # triangles pair
@@ -956,10 +961,16 @@ int main(int argc, char** argv) {
                        "If not empty, will write the 1-hop and 2-hop"
                        "neighborhoods and "
                        "save to file with prefix \"[per_vertex]\". ");
- // clopts.attach_option("sample_keep_prob", sample_prob_keep,
-                       // "Probability of keeping edge during sampling");
-clopts.attach_option("num_iter", num_iter,
+ clopts.attach_option("sample_keep_prob", sample_prob_keep,
+                        "Probability of keeping edge during sampling");
+clopts.attach_option("sample_iter", sample_iter,
                        "Number of sampling iterations (global count)");
+clopts.attach_option("min_prob", min_prob,
+                       "min prob");
+clopts.attach_option("max_prob", max_prob,
+                       "max prob");
+clopts.attach_option("prob_step", prob_step,
+                       "prob step");
 
   if(!clopts.parse(argc, argv)) return EXIT_FAILURE;
   if (prefix == "") {
@@ -973,7 +984,7 @@ clopts.attach_option("num_iter", num_iter,
     return EXIT_FAILURE;
   }
 
-  if ((per_vertex != "") & (num_iter > 1)) {
+  if ((per_vertex != "") & (sample_iter > 1)) {
     std::cout << "--multiple iterations only when no output list\n";
     clopts.print_description();
     return EXIT_FAILURE;
@@ -992,24 +1003,40 @@ clopts.attach_option("num_iter", num_iter,
   dc.cout() << "Number of vertices: " << graph.num_vertices() << std::endl
             << "Number of edges (before sampling):    " << graph.num_edges() << std::endl;
 
-  // dc.cout() << "sample_prob_keep = " << sample_prob_keep << std::endl;
-  dc.cout() << "num_iter = " << num_iter << std::endl;
+  dc.cout() << "sample_prob_keep = " << sample_prob_keep << std::endl;
+  dc.cout() << "sample_iter = " << sample_iter << std::endl;
+
+  size_t reference_bytes;
+  double total_time;
+
+  if(min_prob == max_prob){//i.e., they were not specified by user
+    min_prob = sample_prob_keep;
+    max_prob = sample_prob_keep;
+  }
+
+  double new_sample_prob = min_prob;
+  while(new_sample_prob <= max_prob+0.00000000001){
+    sample_prob_keep = new_sample_prob;
+    new_sample_prob += prob_step;
+
 
   //START ITERATIONS HERE
-  for (int sit = 0; sit < num_iter; sit++) {
+  for (int sit = 0; sit < sample_iter; sit++) {
 
-    dc.cout() << "Iteration " << sit+1 << " of " << num_iter << std::endl;
+    reference_bytes = dc.network_bytes_sent();
+
+    dc.cout() << "Iteration " << sit+1 << " of " << sample_iter << ". current sample prob: " << sample_prob_keep <<std::endl;
 
     graphlab::timer ti;
     
     // Initialize the vertex data
-    // graph.transform_vertices(init_vertex);
+    graph.transform_vertices(init_vertex);
 
     //Sampling
-    // graph.transform_edges(sample_edge);
+    graph.transform_edges(sample_edge);
     //total_edges = graph.map_reduce_vertices<size_t>(get_vertex_degree)/2;
-    // total_edges = graph.map_reduce_edges<size_t>(get_edge_sample_indicator);
-    // dc.cout() << "Total edges counted (after sampling):" << total_edges << std::endl;
+    total_edges = graph.map_reduce_edges<size_t>(get_edge_sample_indicator);
+    dc.cout() << "Total edges counted (after sampling):" << total_edges << std::endl;
 
 
     // create engine to count the number of triangles
@@ -1055,6 +1082,9 @@ clopts.attach_option("num_iter", num_iter,
   	   //    << std::endl;
 
 
+      total_time = ti.current_time();
+      dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
+
       std::ofstream myfile;
       char fname[25];
       sprintf(fname,"2_hop_list_times.txt");
@@ -1063,19 +1093,29 @@ clopts.attach_option("num_iter", num_iter,
         is_new_file = false;
       }
       myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
-      if(is_new_file) myfile << "#graph\truntime" << std::endl;
+      if(is_new_file) myfile << "#graph\tsample_prob_keep\truntime" << std::endl;
       myfile << prefix << "\t"
              // << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << "\t"
              // << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3) << "\t"
              // << (global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2) << "\t"
              // << (global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep  << "\t"
-             << ti.current_time() << "\t"
+             << sample_prob_keep << "\t"
+             << std::setprecision (6)
+             << total_time << "\t"
              << std::endl;
 
       myfile.close();
 
+      sprintf(fname,"netw_2_hops_%d.txt",dc.procid());
+      myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
+
+      myfile << dc.network_bytes_sent() - reference_bytes <<"\n";
+
+      myfile.close();
+
+
     // }
-    if (PER_VERTEX_COUNT==true) {
+    if (0/*PER_VERTEX_COUNT==true*/) {
       graph.save(per_vertex,
               save_neighborhoods(),
               false, /* no compression */
@@ -1086,9 +1126,10 @@ clopts.attach_option("num_iter", num_iter,
 
     }
     
-    dc.cout() << "Total Runtime: " << ti.current_time() << " sec" << std::endl;  
+    //dc.cout() << "Total Runtime: " << ti.current_time() << " sec" << std::endl;  
 
   }//for iterations
+  }//while min/max_prob
 
 
   //graphlab::stop_metric_server();
