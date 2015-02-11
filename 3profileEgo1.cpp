@@ -812,6 +812,7 @@ public:
     //vertex.data().num_triangles = num_triangles / 2;
     //vid_set.size() or vid_vec.size()
     vertex.data().num_triangles = ecounts.n3 / 2;
+    std::cout<<"vertex"<<vertex.id()<<", tri is "<<vertex.data().num_triangles<<std::endl;
     //vertex.data().num_wedges = ecounts.n2 - ( pow(vertex.data().vid_set.size(),2) + 3*vertex.data().vid_set.size() )/2 +
       //  vertex.data().num_triangles;
 
@@ -822,8 +823,7 @@ public:
     // vertex.data().num_disc = ecounts.n1 + /*context.num_edges()*/total_edges - 3*vertex.data().num_triangles + pow(vertex.data().vid_set.size(),2) - ecounts.n2; //works for small example?????
     vertex.data().num_disc = ecounts.n1 + ego_edges - vertex.data().vid_set.size() - vertex.data().num_triangles - vertex.data().num_wedges_e; //new eq??
     // vertex.data().num_empty = (context.num_vertices()  - 1)*(context.num_vertices() - 2)/2 - 
-    std::cout<<"vertex"<<vertex.id()<<", disc is "<<vertex.data().num_disc<<std::endl;
-    vertex.data().num_empty = (ego_vertices)*(ego_vertices - 1)*(ego_vertices - 2)/6 - //now vertices choose 3
+    vertex.data().num_empty = (ego_vertices  - 1)*(ego_vertices - 2)/2 - //now vertices choose 3
         (vertex.data().num_triangles + vertex.data().num_wedges + vertex.data().num_disc);
     vertex.data().vid_set.clear(); //still necessary when iterating, ORIG not cleared but this is
   }
@@ -896,6 +896,16 @@ void ego_edge_prune(graph_type::edge_type& edge) {
 }
 
 graphlab::empty signal_vertex_ego(graphlab::synchronous_engine<triangle_count>::icontext_type& ctx,
+                                     const graph_type::vertex_type& vertex) {
+  if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
+      ctx.signal(vertex);
+      // std::cout<<"Ego vertex "<<ego_center<< ": signalling vertex "<<vertex.id()<<std::endl;
+  }
+  return graphlab::empty();
+}
+//there has to be a better way than writing a signal function for each engine/class
+//include in the class definition???
+graphlab::empty signal_vertex_ego2(graphlab::synchronous_engine<get_per_vertex_count>::icontext_type& ctx,
                                      const graph_type::vertex_type& vertex) {
   if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
       ctx.signal(vertex);
@@ -1045,6 +1055,7 @@ clopts.attach_option("prob_step", prob_step,
 
     //NAIVELY LOOP OVER VERTICES TO GET EGO SUBGRAPHS
     for (size_t e=0; e<graph.num_vertices(); e++) {
+      graph.transform_vertices(init_vertex); //clear anything that was signalled last time but not this time?
       ego_center = e;
       //get ego subgraph
       dc.cout() << "Subgraph for vertex " << ego_center << std::endl;
@@ -1079,7 +1090,8 @@ clopts.attach_option("prob_step", prob_step,
       //graphlab::timer ti2;
       
       graphlab::synchronous_engine<get_per_vertex_count> engine2(dc, graph, clopts);
-      engine2.signal_all();
+      // engine2.signal_all();
+      engine2.map_reduce_vertices<graphlab::empty>(signal_vertex_ego2); //another signal function??
       engine2.start();
       //dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
       //dc.cout() << "Total Running time is: " << ti.current_time() << "seconds" << std::endl;
@@ -1087,11 +1099,11 @@ clopts.attach_option("prob_step", prob_step,
       if (PER_VERTEX_COUNT == false) {
         vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
-        //size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
+        // size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
         //size_t denom = 1;
         //dc.cout() << "denominator: " << denom << std::endl;
-      //  dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
-        //dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
+       dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
+        // dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
         dc.cout() << "Global count from estimators: " 
     	      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
     	      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
