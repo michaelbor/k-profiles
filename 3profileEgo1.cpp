@@ -1058,7 +1058,7 @@ clopts.attach_option("prob_step", prob_step,
       graph.transform_vertices(init_vertex); //clear anything that was signalled last time but not this time?
       ego_center = e;
       //get ego subgraph
-      dc.cout() << "Subgraph for vertex " << ego_center << std::endl;
+      dc.cout() << "Ego subgraph for vertex " << ego_center << std::endl;
       graph.transform_vertices(ego_vertex);
       // graph.transform_edges(ego_edge_prune);
 
@@ -1073,8 +1073,8 @@ clopts.attach_option("prob_step", prob_step,
     
       ego_vertices = graph.map_reduce_vertices<size_t>(get_vertex_ego_indicator);
       ego_edges = graph.map_reduce_edges<size_t>(get_edge_ego_indicator);
-      dc.cout() << "Ego vertices: " << ego_vertices << std::endl;
-      dc.cout() << "Ego edges: " << ego_edges << std::endl;
+      dc.cout() << "Ego ("<< ego_center<< ") vertices: " << ego_vertices << std::endl;
+      dc.cout() << "Ego ("<< ego_center<< ") edges: " << ego_edges << std::endl;
 
       // engine1.signal_all();
       engine1.start();
@@ -1104,7 +1104,7 @@ clopts.attach_option("prob_step", prob_step,
         //dc.cout() << "denominator: " << denom << std::endl;
        // dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
         // dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
-        dc.cout() << "Global count from estimators: " 
+        dc.cout() << "Ego ("<< ego_center<< ") count from estimators: " 
     	      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
     	      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
      	      << (global_counts.num_disc/3)/sample_prob_keep - (1-sample_prob_keep)*(global_counts.num_wedges/3)/pow(sample_prob_keep, 2) << " "
