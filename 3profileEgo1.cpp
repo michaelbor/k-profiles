@@ -1153,7 +1153,8 @@ clopts.attach_option("prob_step", prob_step,
            char fname[20];
            sprintf(fname,"3_egos_%d.txt",dc.procid());
            myfile.open(fname,std::fstream::in | std::fstream::out | std::fstream::app);
-           myfile << std::setprecision (std::numeric_limits<double>::digits10 + 3)
+           myfile << ego_center << "\t"
+           << std::setprecision (std::numeric_limits<double>::digits10 + 3)
            << round((global_counts.num_triangles/3)/pow(sample_prob_keep, 3)) << "\t"
            << round((global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3)) << "\t"
            << round((global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2)) << "\t"

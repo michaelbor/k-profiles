@@ -373,7 +373,8 @@ struct vertex_data_type {
   size_t num_disc;
   size_t num_empty;
 #endif
-  
+  std::vector<twoids> conn_neighbors;
+
   vertex_data_type& operator+=(const vertex_data_type& other) {
     num_triangles += other.num_triangles;
     num_wedges += other.num_wedges;
@@ -385,10 +386,10 @@ struct vertex_data_type {
   }
   
   void save(graphlab::oarchive &oarc) const {
-    oarc << vid_set << num_triangles << num_wedges << num_wedges_e << num_wedges_c << num_disc << num_empty;
+    oarc << conn_neighbors << vid_set << num_triangles << num_wedges << num_wedges_e << num_wedges_c << num_disc << num_empty;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> vid_set >> num_triangles >> num_wedges >> num_wedges_e >> num_wedges_c >> num_disc >>num_empty;
+    iarc >> conn_neighbors >> vid_set >> num_triangles >> num_wedges >> num_wedges_e >> num_wedges_c >> num_disc >>num_empty;
   }
 };
 
@@ -409,14 +410,15 @@ struct edge_data_type {
   double n2e;
   double n2c;
   double n1;
+  double eqn10_const;
 #else
   size_t n3;
   size_t n2;
   size_t n2e;
   size_t n2c;
   size_t n1;
+  size_t eqn10_const;
 #endif
-
   bool sample_indicator;
   void save(graphlab::oarchive &oarc) const {
     oarc << n1 << n2 << n2e << n2c << n3 << sample_indicator;
@@ -496,6 +498,26 @@ struct edge_sum_h10_gather {
     }
     
     iarc >> n2c_n3 >> n2c_double >> n3_double >> n2c >> n2e >> n3;
+  }
+};
+
+struct clique_gather {
+#ifdef DOUBLE_COUNTERS
+  double h10e;
+#else
+  size_t h10e;
+#endif
+  clique_gather& operator+=(const clique_gather& other) {
+    h10e += other.h10e;
+    return *this;
+  }
+  // serialize
+  void save(graphlab::oarchive& oarc) const {
+    oarc << h10e;
+  }
+  // deserialize
+  void load(graphlab::iarchive& iarc) {
+    iarc >> h10e;
   }
 };
 
@@ -736,7 +758,7 @@ public:
     if (edge.data().sample_indicator == 1){
       const vertex_data_type& srclist = edge.source().data();
       const vertex_data_type& targetlist = edge.target().data();
-      size_t tmp= 0, tmp2 = 0;
+      size_t tmp = 0;
       if (targetlist.vid_set.size() < srclist.vid_set.size()) {
         //edge.data() += count_set_intersect(targetlist.vid_set, srclist.vid_set);
         //will this work with += increment??
@@ -877,8 +899,88 @@ public:
      vertex.data().conn_neighbors=ecounts.common;
     //do the rest of clique finding here?? 
     // if not, then add a scatter and move whats below into the apply of a new engine
-    size_t h10v = 0;
+    // size_t h10v = 0;
 
+
+    //store gathers here temporarily
+    vertex.data().num_wedges = ecounts.n3_double;
+    vertex.data().num_disc = -2*ecounts.n3_double + ecounts.n2c_n3;
+    vertex.data().num_empty = 2*ecounts.n2c_double + 2*ecounts.n3_double - ecounts.n2c_n3;
+  }
+
+  edge_dir_type scatter_edges(icontext_type& context,
+                              const vertex_type& vertex) const {
+    return graphlab::OUT_EDGES;
+  }
+
+  void scatter(icontext_type& context,
+              const vertex_type& vertex,
+              edge_type& edge) const {
+    //    vertex_type othervtx = edge.target();
+    if (edge.data().sample_indicator == 1){
+      const vertex_data_type& srclist = edge.source().data();
+      //const vertex_data_type& targetlist = edge.target().data();
+       std::vector<graphlab::vertex_id_type> srcne = edge.source().data().vid_set.vid_vec;
+       std::vector<graphlab::vertex_id_type>  trgne = edge.target().data().vid_set.vid_vec;
+      std::vector<graphlab::vertex_id_type> interlist;
+          interlist.clear();    
+      sort(srcne.begin(),srcne.end());
+      sort(trgne.begin(),trgne.end());
+      edge.data().eqn10_const=0;     
+      // interlist contains the intersection.  
+      std::set_intersection(srcne.begin(),srcne.end(),trgne.begin(),trgne.end(),std::back_inserter(interlist));
+      //Check for each pair of members if they have a common edge, if they do count.
+      if (interlist.size()>0){
+        for(size_t i=0;i<(interlist.size()-1);i++){
+          for(size_t j=i+1;j<interlist.size();j++){
+            for(size_t k=0;k<srclist.conn_neighbors.size();k++) {
+              if ( ((srclist.conn_neighbors.at(k).first==interlist.at(i))&&(srclist.conn_neighbors.at(k).second==interlist.at(j))) || ((srclist.conn_neighbors.at(k).first==interlist.at(j)) && (srclist.conn_neighbors.at(k).second==interlist.at(i)))) {
+              edge.data().eqn10_const++;
+              // std::cout<<srclist.conn_neighbors.at(k).first<<" with " <<srclist.conn_neighbors.at(k).second<<std::endl;
+              }
+            }
+          }
+        }
+      }
+
+    }
+  }
+};
+
+
+class get_ego_final :
+      // public graphlab::ivertex_program<graph_type, size_t>,
+      public graphlab::ivertex_program<graph_type, clique_gather>,
+      /* I have no data. Just force it to POD */
+      public graphlab::IS_POD_TYPE  {
+public:
+  // Gather on all edges
+  edge_dir_type gather_edges(icontext_type& context,
+                             const vertex_type& vertex) const {
+    return graphlab::ALL_EDGES;
+  }
+
+  //gather
+  gather_type gather(icontext_type& context,
+                     const vertex_type& vertex,
+                     edge_type& edge) const {
+  
+  clique_gather gather;
+     if (edge.data().sample_indicator == 1){
+        gather.h10e = edge.data().eqn10_const;
+      }
+      else {
+        gather.h10e = 0;
+      }
+      return gather;
+  }
+     
+  //apply
+  void apply(icontext_type& context, vertex_type& vertex,
+             const gather_type& ecounts) {
+  
+    size_t h10 = ecounts.h10e/3.; //eqch clique counted by all 3 incoming edges
+    
     //matrix inverse here??
     /*0.333333333333333   0.333333333333333  -0.166666666666667  -1.000000000000000
                       0  -1.000000000000000   0.500000000000000   3.000000000000000
@@ -886,15 +988,14 @@ public:
                       0                   0                   0   1.000000000000000*/
 
     //can get simpler system with just n3_double/n2c_double/n2c_n3 and n3*N(v), n2c*N(v)
-    size_t h6 = (2*ecounts.n2c_double + 2*ecounts.n3_double - ecounts.n2c_n3 - 6*h10v)/6.;
-    size_t h8 = (-2*ecounts.n3_double + ecounts.n2c_n3 + 6*h10v)/2.;
-    size_t h9 = ecounts.n3_double - 3*h10v;
-    size_t h10 = h10v; //to implement
+    // size_t h6 = (2*ecounts.n2c_double + 2*ecounts.n3_double - ecounts.n2c_n3 - 6*h10v)/6.;
+    // size_t h8 = (-2*ecounts.n3_double + ecounts.n2c_n3 + 6*h10v)/2.;
+    // size_t h9 = ecounts.n3_double - 3*h10v;
 
-    vertex.data().num_triangles += h10; //to implement
-    vertex.data().num_wedges = vertex.data().num_wedges_c + h9;
-    vertex.data().num_disc = h8;
-    vertex.data().num_empty = h6;
+    vertex.data().num_triangles += h10;
+    vertex.data().num_wedges = vertex.data().num_wedges_c + (vertex.data().num_wedges - 3*h10);
+    vertex.data().num_disc = (vertex.data().num_disc + 6*h10)/2.;
+    vertex.data().num_empty = (vertex.data().num_empty - 6*h10)/6.;;
     //print here instead of in main??
     vertex.data().vid_set.clear(); //still necessary??    
   }
@@ -940,17 +1041,28 @@ struct save_profile_count{
   //   double n_followed = v.num_out_edges();
   //   double n_following = v.num_in_edges();
 
+    //print?
+    std::cout << "Estimators for vertex " << v.id() << ": " << (v.data().num_triangles)/pow(sample_prob_keep, 3) << " "
+    << (v.data().num_wedges)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(v.data().num_triangles)/pow(sample_prob_keep, 3) << " "
+    << (v.data().num_disc)/sample_prob_keep - (1-sample_prob_keep)*(v.data().num_wedges)/pow(sample_prob_keep, 2) << " "
+    << (v.data().num_empty)-(1-sample_prob_keep)*(v.data().num_disc)/sample_prob_keep << std::endl;
   //   return graphlab::tostr(v.id()) + "\t" +
   //          graphlab::tostr(nt) + "\t" +
   //          graphlab::tostr(n_followed) + "\t" + 
   //          graphlab::tostr(n_following) + "\n";
   //
   /* WE SHOULD SCALE THE LOCAL COUNTS WITH p_sample BEFORE WRITING TO FILE!!!*/
-  return graphlab::tostr(v.id()) + "\t" +
-         graphlab::tostr(v.data().num_triangles) + "\t" +
-         graphlab::tostr(v.data().num_wedges) + "\t" +
-         graphlab::tostr(v.data().num_disc) + "\t" +
-         graphlab::tostr(v.data().num_empty) + "\n";
+  return 
+         graphlab::tostr(v.id()) + "\t" +
+         // graphlab::tostr(v.data().num_triangles) + "\t" +
+         // graphlab::tostr(v.data().num_wedges) + "\t" +
+         // graphlab::tostr(v.data().num_disc) + "\t" +
+         // graphlab::tostr(v.data().num_empty) + "\n";
+         graphlab::tostr((v.data().num_triangles)/pow(sample_prob_keep, 3)) + "\t" +
+         graphlab::tostr((v.data().num_wedges)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(v.data().num_triangles)/pow(sample_prob_keep, 3)) + "\t" +
+         graphlab::tostr((v.data().num_disc)/sample_prob_keep - (1-sample_prob_keep)*(v.data().num_wedges)/pow(sample_prob_keep, 2)) + "\t" +
+         graphlab::tostr((v.data().num_empty)-(1-sample_prob_keep)*(v.data().num_disc)/sample_prob_keep) + '\n';
+  
   }
   std::string save_edge(graph_type::edge_type e) {
     return "";
@@ -1059,7 +1171,7 @@ clopts.attach_option("prob_step", prob_step,
 
 
     // create engine to count the number of triangles
-    dc.cout() << "Counting 3-profiles..." << std::endl;
+    dc.cout() << "Counting Ego subgraphs..." << std::endl;
     graphlab::synchronous_engine<triangle_count> engine1(dc, graph, clopts);
     // engine_type engine(dc, graph, clopts);
 
@@ -1080,30 +1192,36 @@ clopts.attach_option("prob_step", prob_step,
     graphlab::synchronous_engine<get_per_vertex_count> engine2(dc, graph, clopts);
     engine2.signal_all();
     engine2.start();
+
+
+    graphlab::synchronous_engine<get_ego_final> engine3(dc, graph, clopts);
+    engine3.signal_all();
+    engine3.start();
+    
     //dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
     //dc.cout() << "Total Running time is: " << ti.current_time() << "seconds" << std::endl;
     
     //no global counts, just print/write each ego subgraph without rescaling
     if (PER_VERTEX_COUNT == false) {
-      vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
+    //   vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
-      //size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
-      //size_t denom = 1;
-      //dc.cout() << "denominator: " << denom << std::endl;
-    //  dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
-      //dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
-      dc.cout() << "Global count from estimators: " 
-  	      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
-  	      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
-   	      << (global_counts.num_disc/3)/sample_prob_keep - (1-sample_prob_keep)*(global_counts.num_wedges/3)/pow(sample_prob_keep, 2) << " "
-  	      << (global_counts.num_empty/3)-(1-sample_prob_keep)*(global_counts.num_disc/3)/sample_prob_keep  << " "
-  	      << std::endl;
+    //   //size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
+    //   //size_t denom = 1;
+    //   //dc.cout() << "denominator: " << denom << std::endl;
+    // //  dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
+    //   //dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
+    //   dc.cout() << "Global count from estimators: " 
+  	 //      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
+  	 //      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
+   	//       << (global_counts.num_disc/3)/sample_prob_keep - (1-sample_prob_keep)*(global_counts.num_wedges/3)/pow(sample_prob_keep, 2) << " "
+  	 //      << (global_counts.num_empty/3)-(1-sample_prob_keep)*(global_counts.num_disc/3)/sample_prob_keep  << " "
+  	 //      << std::endl;
 
       total_time = ti.current_time();
       dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
       std::ofstream myfile;
       char fname[20];
-      sprintf(fname,"counts_3_profiles.txt");
+      sprintf(fname,"counts_3_egos2.txt");
       bool is_new_file = true;
       if (std::ifstream(fname)){
         is_new_file = false;
@@ -1111,19 +1229,14 @@ clopts.attach_option("prob_step", prob_step,
       myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
       if(is_new_file) myfile << "#graph\tsample_prob_keep\ttriangles\twedges\tdisc\tempty\truntime" << std::endl;
       myfile << prefix << "\t"
-	     << sample_prob_keep << "\t"
-             << std::setprecision (std::numeric_limits<double>::digits10 + 3)
-             << round((global_counts.num_triangles/3)/pow(sample_prob_keep, 3)) << "\t"
-             << round((global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3)) << "\t"
-             << round((global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2)) << "\t"
-             << round((global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep)  << "\t"
-             << std::setprecision (6)
-             << total_time
-             << std::endl;
+           << sample_prob_keep << "\t"
+           << std::setprecision (6)
+           << total_time
+           << std::endl;
 
       myfile.close();
 
-      sprintf(fname,"netw_3_prof_%d.txt",dc.procid());
+      sprintf(fname,"netw_3_egos2_%d.txt",dc.procid());
       myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
   
       myfile << dc.network_bytes_sent() - reference_bytes <<"\n";
