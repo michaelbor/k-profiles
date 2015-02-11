@@ -753,6 +753,15 @@ public:
       edge.data().n1 = ego_vertices - (tmp2 - tmp);
     }
   }
+
+  // graphlab::empty signal_vertex_ego(icontext_type& ctx, 
+  //                   const graph_type::vertex_type& vertex) {
+  //   if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
+  //       ctx.signal(vertex);
+  //       // std::cout<<"Ego vertex "<<ego_center<< ": signalling vertex "<<vertex.id()<<std::endl;
+  //   }
+  //   return graphlab::empty();
+  // }
 };
 
 /*
@@ -833,6 +842,15 @@ public:
                              const vertex_type& vertex) const {
     return graphlab::NO_EDGES;
   }
+
+  // graphlab::empty signal_vertex_ego2(icontext_type& ctx,
+  //                     const graph_type::vertex_type& vertex) {
+  //   if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
+  //       ctx.signal(vertex);
+  //       // std::cout<<"Ego vertex "<<ego_center<< ": signalling vertex "<<vertex.id()<<std::endl;
+  //   }
+  //   return graphlab::empty();
+  // }
 
 
 };
@@ -989,7 +1007,7 @@ clopts.attach_option("prob_step", prob_step,
   }
 
   if ((per_vertex != "") & (sample_iter > 1)) {
-    std::cout << "--multiple iterations for global count only\n";
+    std::cout << "--multiple iterations for no writing only\n";
     clopts.print_description();
     return EXIT_FAILURE;
   }
@@ -1054,6 +1072,19 @@ clopts.attach_option("prob_step", prob_step,
     // engine_type engine(dc, graph, clopts);
 
     //NAIVELY LOOP OVER VERTICES TO GET EGO SUBGRAPHS
+    if (PER_VERTEX_COUNT == true) {
+      std::ofstream myfile;
+      char fname[20];
+      sprintf(fname,"3_egos_%d.txt",dc.procid());
+      bool is_new_file = true;
+      if (std::ifstream(fname)){
+        is_new_file = false;
+      }
+      myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::trunc);
+      myfile << "triangles\twedges\tdisc\tempty" << std::endl;
+      myfile.close();
+    }    
+    
     for (size_t e=0; e<graph.num_vertices(); e++) {
       graph.transform_vertices(init_vertex); //clear anything that was signalled last time but not this time?
       ego_center = e;
@@ -1068,6 +1099,7 @@ clopts.attach_option("prob_step", prob_step,
       //signalling? then only the signalled vertices/edges will be run when call engine.start()
       //signal_neighbors
       engine1.map_reduce_vertices<graphlab::empty>(signal_vertex_ego);
+      // engine1.map_reduce_vertices<graphlab::empty>(triangle_count::signal_vertex_ego);
       graph.transform_edges(ego_edge_prune);      
       //only run on vertices included in ego subgraph, and only include edges between these vertices
     
@@ -1092,61 +1124,76 @@ clopts.attach_option("prob_step", prob_step,
       graphlab::synchronous_engine<get_per_vertex_count> engine2(dc, graph, clopts);
       // engine2.signal_all();
       engine2.map_reduce_vertices<graphlab::empty>(signal_vertex_ego2); //another signal function??
+      // engine2.map_reduce_vertices<graphlab::empty>(get_per_vertex_count::signal_vertex_ego2); //another signal function??
       engine2.start();
       //dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
       //dc.cout() << "Total Running time is: " << ti.current_time() << "seconds" << std::endl;
-      
-      if (PER_VERTEX_COUNT == false) {
-        vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
+      vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
-        // size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
-        //size_t denom = 1;
-        //dc.cout() << "denominator: " << denom << std::endl;
-       // dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
-        // dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
-        dc.cout() << "Ego ("<< ego_center<< ") count from estimators: " 
-    	      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
-    	      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
-     	      << (global_counts.num_disc/3)/sample_prob_keep - (1-sample_prob_keep)*(global_counts.num_wedges/3)/pow(sample_prob_keep, 2) << " "
-    	      << (global_counts.num_empty/3)-(1-sample_prob_keep)*(global_counts.num_disc/3)/sample_prob_keep  << " "
-    	      << std::endl;
-
-        total_time = ti.current_time();
-        dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
+      // if (PER_VERTEX_COUNT == false) {
         
+      //   // size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
+      //   //size_t denom = 1;
+      //   //dc.cout() << "denominator: " << denom << std::endl;
+      //  // dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
+      //   // dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
+      //   dc.cout() << "Ego ("<< ego_center<< ") count from estimators: " 
+    	 //      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
+    	 //      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
+     	//       << (global_counts.num_disc/3)/sample_prob_keep - (1-sample_prob_keep)*(global_counts.num_wedges/3)/pow(sample_prob_keep, 2) << " "
+    	 //      << (global_counts.num_empty/3)-(1-sample_prob_keep)*(global_counts.num_disc/3)/sample_prob_keep  << " "
+    	 //      << std::endl;
+
+        
+      // }
+
+      if (PER_VERTEX_COUNT == true) { //these must be redefined in each new conditional?
+          // if (myfile.is_open()) {
+           std::ofstream myfile;
+           char fname[20];
+           sprintf(fname,"3_egos_%d.txt",dc.procid());
+           myfile.open(fname,std::fstream::in | std::fstream::out | std::fstream::app);
+           myfile << std::setprecision (std::numeric_limits<double>::digits10 + 3)
+           << round((global_counts.num_triangles/3)/pow(sample_prob_keep, 3)) << "\t"
+           << round((global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3)) << "\t"
+           << round((global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2)) << "\t"
+           << round((global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep)  << "\t"
+           << std::endl;
+          // }
+           myfile.close();
       }
+    
     }
+    
 
+    total_time = ti.current_time();
+    dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
+   
+    std::ofstream myfile;
+    char fname[20];
+    sprintf(fname,"counts_3_egos.txt");
+    bool is_new_file = true;
+    if (std::ifstream(fname)){
+      is_new_file = false;
+    }
+    myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
+    if(is_new_file) myfile << "#graph\tsample_prob_keep\truntime" << std::endl;
+    myfile << prefix << "\t"
+     << sample_prob_keep << "\t"
+           << std::setprecision (6)
+           << total_time
+           << std::endl;
 
-    //   std::ofstream myfile;
-    //   char fname[20];
-    //   sprintf(fname,"counts_3_profiles.txt");
-    //   bool is_new_file = true;
-    //   if (std::ifstream(fname)){
-    //     is_new_file = false;
-    //   }
-    //   myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
-    //   if(is_new_file) myfile << "#graph\tsample_prob_keep\ttriangles\twedges\tdisc\tempty\truntime" << std::endl;
-    //   myfile << prefix << "\t"
-	   //   << sample_prob_keep << "\t"
-    //          << std::setprecision (std::numeric_limits<double>::digits10 + 3)
-    //          << round((global_counts.num_triangles/3)/pow(sample_prob_keep, 3)) << "\t"
-    //          << round((global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3)) << "\t"
-    //          << round((global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2)) << "\t"
-    //          << round((global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep)  << "\t"
-    //          << std::setprecision (6)
-    //          << total_time
-    //          << std::endl;
+    myfile.close();
 
-    //   myfile.close();
+    sprintf(fname,"netw_3_egos_%d.txt",dc.procid());
+    myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
 
-    //   sprintf(fname,"netw_3_prof_%d.txt",dc.procid());
-    //   myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
-  
-    //   myfile << dc.network_bytes_sent() - reference_bytes <<"\n";
+    myfile << dc.network_bytes_sent() - reference_bytes <<"\n";
 
-    //   myfile.close();
+    myfile.close();
 
+    
     
     // else {
     //   graph.save(per_vertex,
