@@ -812,7 +812,7 @@ public:
     //vertex.data().num_triangles = num_triangles / 2;
     //vid_set.size() or vid_vec.size()
     vertex.data().num_triangles = ecounts.n3 / 2;
-    std::cout<<"vertex"<<vertex.id()<<", tri is "<<vertex.data().num_triangles<<std::endl;
+    // std::cout<<"vertex"<<vertex.id()<<", tri is "<<vertex.data().num_triangles<<std::endl;
     //vertex.data().num_wedges = ecounts.n2 - ( pow(vertex.data().vid_set.size(),2) + 3*vertex.data().vid_set.size() )/2 +
       //  vertex.data().num_triangles;
 
