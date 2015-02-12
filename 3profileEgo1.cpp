@@ -897,7 +897,8 @@ void ego_vertex(graph_type::vertex_type& vertex) {
   //   }
   // }
   //this assumes input is sorted??
-  if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)){
+  // if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)){
+  if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) ){
     vertex.data().in_ego_indicator = 1;
     // std::cout<<"Ego vertex "<<ego_center<< ": vertex indicator to "<<vertex.id()<<std::endl;
   }
@@ -915,7 +916,8 @@ void ego_edge_prune(graph_type::edge_type& edge) {
 
 graphlab::empty signal_vertex_ego(graphlab::synchronous_engine<triangle_count>::icontext_type& ctx,
                                      const graph_type::vertex_type& vertex) {
-  if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
+  // if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
+  if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center))) {
       ctx.signal(vertex);
       // std::cout<<"Ego vertex "<<ego_center<< ": signalling vertex "<<vertex.id()<<std::endl;
   }
@@ -925,7 +927,8 @@ graphlab::empty signal_vertex_ego(graphlab::synchronous_engine<triangle_count>::
 //include in the class definition???
 graphlab::empty signal_vertex_ego2(graphlab::synchronous_engine<get_per_vertex_count>::icontext_type& ctx,
                                      const graph_type::vertex_type& vertex) {
-  if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
+  // if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
+  if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center))) {
       ctx.signal(vertex);
       // std::cout<<"Ego vertex "<<ego_center<< ": signalling vertex "<<vertex.id()<<std::endl;
   }
@@ -1048,6 +1051,9 @@ clopts.attach_option("prob_step", prob_step,
 
     dc.cout() << "Iteration " << sit+1 << " of " << sample_iter << ". current sample prob: " << sample_prob_keep <<std::endl;
 
+
+    size_t num_h10 = 0; //total cliques in the graph (for debugging)
+
     graphlab::timer ti;
     
     // Initialize the vertex data
@@ -1081,7 +1087,7 @@ clopts.attach_option("prob_step", prob_step,
         is_new_file = false;
       }
       myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::trunc);
-      myfile << "triangles\twedges\tdisc\tempty" << std::endl;
+      myfile << "id\ttriangles\twedges\tdisc\tempty" << std::endl;
       myfile.close();
     }    
     
@@ -1130,19 +1136,21 @@ clopts.attach_option("prob_step", prob_step,
       //dc.cout() << "Total Running time is: " << ti.current_time() << "seconds" << std::endl;
       vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
+
+      num_h10 += global_counts.num_triangles/3;
       // if (PER_VERTEX_COUNT == false) {
         
-      //   // size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
-      //   //size_t denom = 1;
-      //   //dc.cout() << "denominator: " << denom << std::endl;
-      //  // dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
-      //   // dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
-      //   dc.cout() << "Ego ("<< ego_center<< ") count from estimators: " 
-    	 //      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
-    	 //      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
-     	//       << (global_counts.num_disc/3)/sample_prob_keep - (1-sample_prob_keep)*(global_counts.num_wedges/3)/pow(sample_prob_keep, 2) << " "
-    	 //      << (global_counts.num_empty/3)-(1-sample_prob_keep)*(global_counts.num_disc/3)/sample_prob_keep  << " "
-    	 //      << std::endl;
+       //  // size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
+       //  //size_t denom = 1;
+       //  //dc.cout() << "denominator: " << denom << std::endl;
+       // // dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
+       //  // dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
+       //  dc.cout() << "Ego ("<< ego_center<< ") count from estimators: " 
+    	  //     << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
+    	  //     << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
+     	 //      << (global_counts.num_disc/3)/sample_prob_keep - (1-sample_prob_keep)*(global_counts.num_wedges/3)/pow(sample_prob_keep, 2) << " "
+    	  //     << (global_counts.num_empty/3)-(1-sample_prob_keep)*(global_counts.num_disc/3)/sample_prob_keep  << " "
+    	  //     << std::endl;
 
         
       // }
@@ -1169,6 +1177,8 @@ clopts.attach_option("prob_step", prob_step,
 
     total_time = ti.current_time();
     dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
+    num_h10 = num_h10/4;
+    dc.cout() << "Number of ego triangles (h10): " << num_h10 << std::endl; 
    
     std::ofstream myfile;
     char fname[20];

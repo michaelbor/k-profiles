@@ -992,8 +992,10 @@ public:
     // size_t h8 = (-2*ecounts.n3_double + ecounts.n2c_n3 + 6*h10v)/2.;
     // size_t h9 = ecounts.n3_double - 3*h10v;
 
-    vertex.data().num_triangles += h10;
-    vertex.data().num_wedges = vertex.data().num_wedges_c + (vertex.data().num_wedges - 3*h10);
+    // vertex.data().num_triangles += h10;
+    // vertex.data().num_wedges = vertex.data().num_wedges_c + (vertex.data().num_wedges - 3*h10);
+    vertex.data().num_triangles = h10;
+    vertex.data().num_wedges -= 3*h10;
     vertex.data().num_disc = (vertex.data().num_disc + 6*h10)/2.;
     vertex.data().num_empty = (vertex.data().num_empty - 6*h10)/6.;;
     //print here instead of in main??
