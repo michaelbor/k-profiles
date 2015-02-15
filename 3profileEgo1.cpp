@@ -1053,6 +1053,9 @@ clopts.attach_option("prob_step", prob_step,
 
 
     size_t num_h10 = 0; //total cliques in the graph (for debugging)
+    size_t num_h9 = 0; //total cliques in the graph (for debugging)
+    size_t num_h8 = 0; //total cliques in the graph (for debugging)
+    size_t num_h6 = 0; //total cliques in the graph (for debugging)
 
     graphlab::timer ti;
     
@@ -1091,7 +1094,8 @@ clopts.attach_option("prob_step", prob_step,
       myfile.close();
     }    
     
-    for (size_t e=0; e<graph.num_vertices(); e++) {
+    // foreach(graphlab::vertex_id_type vid, MAX_VID_VEC) {
+    for (size_t e=0; e<graph.num_vertices(); e++) { //WRONG! assumes vertices are labelled 0 through number - 1
       graph.transform_vertices(init_vertex); //clear anything that was signalled last time but not this time?
       ego_center = e;
       //get ego subgraph
@@ -1138,6 +1142,9 @@ clopts.attach_option("prob_step", prob_step,
 
 
       num_h10 += global_counts.num_triangles/3;
+      num_h9 += global_counts.num_wedges/3;
+      num_h8 += global_counts.num_disc/3;
+      num_h6 += global_counts.num_empty/3;
       // if (PER_VERTEX_COUNT == false) {
         
        //  // size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
@@ -1178,7 +1185,11 @@ clopts.attach_option("prob_step", prob_step,
     total_time = ti.current_time();
     dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
     num_h10 = num_h10/4;
-    dc.cout() << "Number of ego triangles (h10): " << num_h10 << std::endl; 
+    num_h9 = num_h9/2;
+    dc.cout() << "Number of ego triangles (N10): " << num_h10 << std::endl; 
+    dc.cout() << "Number of ego wedge (N9): " << num_h9 << std::endl; 
+    dc.cout() << "Number of ego disc (N8): " << num_h8 << std::endl; 
+    dc.cout() << "Number of ego empty (N6): " << num_h6 << std::endl; 
    
     std::ofstream myfile;
     char fname[20];
