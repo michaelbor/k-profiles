@@ -165,7 +165,7 @@ void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift)
     }
 }
 
-size_t HASH_THRESHOLD = 64;
+size_t HASH_THRESHOLD = 1000000000;//64;
 
 // We on each vertex, either a vector of sorted VIDs
 // or a hash set (cuckoo hash) of VIDs.
@@ -634,7 +634,7 @@ void init_vertex(graph_type::vertex_type& vertex) {
 
 
 void sample_edge(graph_type::edge_type& edge) {
-  
+  //something based on degree here????
   if(graphlab::random::rand01() < sample_prob_keep)   
     edge.data().sample_indicator = 1;
   else
@@ -642,7 +642,7 @@ void sample_edge(graph_type::edge_type& edge) {
 }
 
 
-class get_full_neighborhoods :
+class get_full_neighborhoods : //always full
       public graphlab::ivertex_program<graph_type,
                                       set_union_gather>,
       /* I have no data. Just force it to POD */
@@ -664,10 +664,10 @@ public:
                      const vertex_type& vertex,
                      edge_type& edge) const {
     set_union_gather gather;
-    if(edge.data().sample_indicator == 0){
-      gather.v = -1; 
-    }
-    else{
+    // if(edge.data().sample_indicator == 0){
+      // gather.v = -1; 
+    // }
+    // else{
       graphlab::vertex_id_type otherid = edge.target().id() == vertex.id() ?
                                        edge.source().id() : edge.target().id();
 
@@ -681,7 +681,7 @@ public:
     //if (PER_VERTEX_COUNT || otherid > vertex.id()) {
       gather.v = otherid; //will this work? what is v??
     //} 
-   } 
+   // } 
    return gather;
   }
 
@@ -750,7 +750,7 @@ public:
     // if (GASphase == 0) { //set union
     if (context.iteration()%5 ==1) {
       gather.union_flag = 1;
-      if((edge.source().data().in_ego_indicator == 0) || (edge.target().data().in_ego_indicator == 0)) {
+      if((edge.data().sample_indicator == 0) || (edge.source().data().in_ego_indicator == 0) || (edge.target().data().in_ego_indicator == 0)) {
       // if(edge.data().in_ego_indicator == 0){
       // if(edge.data().sample_indicator == 0){
         gather.v = -1; 
@@ -799,7 +799,7 @@ public:
     // else if (GASphase==1) { //edge sum
     else if (context.iteration()%5 ==3) { //edge sum
       gather.union_flag = 0;
-      if((edge.source().data().in_ego_indicator == 1) && (edge.target().data().in_ego_indicator == 1)) {
+      if( (edge.data().sample_indicator == 1) && (edge.source().data().in_ego_indicator == 1) && (edge.target().data().in_ego_indicator == 1)) {
       // if (edge.data().in_ego_indicator == 1){
         //return edge.data();
         // std::cout << "Edge (" << edge.source().id() << "," << edge.target().id() << "): " << edge.data().n3
@@ -828,7 +828,7 @@ public:
     }
     else if (context.iteration()%5 == 4) {
       gather.union_flag = 0;
-      //reduce on the ego vertex, reuse the ns
+      //reduce on the ego vertex, reuse the n's
       if (vertex.id() == edge.target().id()) {
         gather.n3 = edge.source().data().num_triangles;
         gather.n2 = edge.source().data().num_wedges;
@@ -936,13 +936,15 @@ public:
     //get a final count, signal the next id
     //store (too much space...) or just print??
     if (PER_VERTEX_COUNT) {
+      //not exactly right to apply estimators to vertex counts instead of global, 
+      //accuracy not well defined, this probably only works on high degree vertices
       std::cout << 
       // // "Iteration: " << context.iteration() << ", ego 3 profile "<< 
       vertex.id() << "\t" 
-      << (neighborhood_ecounts.n3/3)/pow(sample_prob_keep, 3) << "\t" 
-      << (neighborhood_ecounts.n2/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(neighborhood_ecounts.n3/3)/pow(sample_prob_keep, 2) << "\t"
-      << (neighborhood_ecounts.n2e/3)/sample_prob_keep - (1-sample_prob_keep)*(neighborhood_ecounts.n2/3)/pow(sample_prob_keep, 2)<< "\t" 
-      << (neighborhood_ecounts.n1/3) - (1-sample_prob_keep)*(neighborhood_ecounts.n2e/3)/sample_prob_keep << std::endl;
+      << round((neighborhood_ecounts.n3/3)/pow(sample_prob_keep, 3)) << "\t" 
+      << round((neighborhood_ecounts.n2/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(neighborhood_ecounts.n3/3)/pow(sample_prob_keep, 2)) << "\t"
+      << round((neighborhood_ecounts.n2e/3)/sample_prob_keep - (1-sample_prob_keep)*(neighborhood_ecounts.n2/3)/pow(sample_prob_keep, 2))<< "\t" 
+      << round((neighborhood_ecounts.n1/3) - (1-sample_prob_keep)*(neighborhood_ecounts.n2e/3)/sample_prob_keep) << std::endl;
     }
     
     size_t tosig = context.iteration()/5 + 1;  
@@ -1015,7 +1017,7 @@ public:
     // if (GASphase==0) {
     if (context.iteration()%5 ==1) {
       //    vertex_type othervtx = edge.target();
-      if((edge.source().data().in_ego_indicator == 1) && (edge.target().data().in_ego_indicator == 1)) {
+      if((edge.data().sample_indicator == 1) && (edge.source().data().in_ego_indicator == 1) && (edge.target().data().in_ego_indicator == 1)) {
       // if (edge.data().in_ego_indicator == 1){
       // if (edge.data().sample_indicator == 1){
         const vertex_data_type& srclist = edge.source().data();
