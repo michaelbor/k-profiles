@@ -117,8 +117,9 @@ double prob_step = 0.5;
 size_t total_edges = 0;
 int sample_iter = 1;
 graphlab::vertex_id_type ego_center = 0;
-size_t ego_vertices = 0;
-size_t ego_edges = 0;
+// size_t ego_vertices = 0;
+// size_t ego_edges = 0;
+// short int GASphase = 0;
 
 void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift) {
     int x, y;
@@ -370,6 +371,8 @@ struct vertex_data_type {
 #endif
   bool in_ego_indicator;
   vid_vector vid_set_ORIG;
+  size_t ego_edge_count;
+  size_t ego_vertices;
 
   vertex_data_type& operator+=(const vertex_data_type& other) {
     num_triangles += other.num_triangles;
@@ -382,10 +385,12 @@ struct vertex_data_type {
   }
   
   void save(graphlab::oarchive &oarc) const {
-    oarc << vid_set << num_triangles << num_wedges << num_wedges_e << num_wedges_c << num_disc << num_empty << in_ego_indicator;
+    oarc << vid_set << num_triangles << num_wedges << num_wedges_e << 
+    num_wedges_c << num_disc << num_empty << in_ego_indicator << ego_edge_count << ego_vertices;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> vid_set >> num_triangles >> num_wedges >> num_wedges_e >> num_wedges_c >> num_disc >>num_empty >> in_ego_indicator;
+    iarc >> vid_set >> num_triangles >> num_wedges >> num_wedges_e >> 
+    num_wedges_c >> num_disc >>num_empty >> in_ego_indicator >> ego_edge_count >> ego_vertices;
   }
 };
 
@@ -415,19 +420,24 @@ struct edge_data_type {
 #endif
 
   bool sample_indicator;
-  bool in_ego_indicator;
+  // bool in_ego_indicator; //not needed?
+  // size_t ego_edges; //???
 
   void save(graphlab::oarchive &oarc) const {
-    oarc << n1 << n2 << n2e << n2c << n3 << sample_indicator << in_ego_indicator;
+    oarc << n1 << n2 << n2e << n2c << n3 << sample_indicator;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> n1 >> n2 >> n2e >> n2c >> n3 >> sample_indicator >> in_ego_indicator;
+    iarc >> n1 >> n2 >> n2e >> n2c >> n3 >> sample_indicator;
   }
 };
 
-struct edge_sum_gather {
 
-#ifdef DOUBLE_COUNTERS
+
+struct set_union_sum_gather {
+  graphlab::vertex_id_type v;
+  std::vector<graphlab::vertex_id_type> vid_vec;
+
+  #ifdef DOUBLE_COUNTERS
   double n3;
   double n2;
   double n2e;
@@ -436,7 +446,7 @@ struct edge_sum_gather {
   // double n3_double;
   // double n2c_double;
   // double n2c_n3;
-#else
+  #else
   size_t n3;
   size_t n2;
   size_t n2e;
@@ -445,27 +455,94 @@ struct edge_sum_gather {
   // size_t n3_double;
   // size_t n2c_double;
   // size_t n2c_n3;
-#endif
-  edge_sum_gather& operator+=(const edge_sum_gather& other) {
-    n3 += other.n3;
-    n2 += other.n2;
-    n2e += other.n2e;
-    n2c += other.n2c;
-    n1 += other.n1;
-    
-    return *this;
+  #endif
+  
+  bool union_flag;
+
+  set_union_sum_gather():v(-1) {
   }
 
-  // serialize
-  void save(graphlab::oarchive& oarc) const {
+  size_t size() const {
+    if (union_flag) {
+      if (v == (graphlab::vertex_id_type)-1) return vid_vec.size();
+      else return 1;
+    }
+    else return 0;
+  }
+  
+  set_union_sum_gather& operator+=(const set_union_sum_gather& other) {
+    // if (GASphase==0) { //set union
+    // if (context.iteration()%3 ==1) { //set union
+    if (union_flag) {
+    //do it all, cannot split based on the iteration or a global variable
+
+      if (size() == 0) {
+      // if (size() == 0 && n3==0 && n2==0 && n2c==0 && n2e==0 &&n1==0) {
+        //save as tmp before overwriting, then add
+        (*this) = other;
+        // (*this)->v = other.v;
+        return (*this); //once at end
+      }
+      else if (other.size() == 0) {
+      // else if (other.size() == 0 && n3==0 && n2==0 && n2c==0 && n2e==0 &&n1==0) {
+        return *this; //once at end
+      }
+
+      if (vid_vec.size() == 0) {
+        vid_vec.push_back(v);
+        v = (graphlab::vertex_id_type)(-1);
+      }
+      if (other.vid_vec.size() > 0) {
+        size_t ct = vid_vec.size();
+        vid_vec.resize(vid_vec.size() + other.vid_vec.size());
+        for (size_t i = 0; i < other.vid_vec.size(); ++i) {
+          vid_vec[ct + i] = other.vid_vec[i];
+        }
+      }
+      else if (other.v != (graphlab::vertex_id_type)-1) {
+        vid_vec.push_back(other.v);
+      }
+      return *this;
+
+    }
+    // else if (GASphase==1) { //edge sum
+    // else if (context.iteration()%3 ==2) { //edge sum
+    else {
+      n3 += other.n3;
+      n2 += other.n2;
+      n2e += other.n2e;
+      n2c += other.n2c;
+      n1 += other.n1;
+    
+      return *this;
+    }
+    // else { //necessary??
+      // return *this;
+    // }
+      // return *this;
+  }
+
+
+void save(graphlab::oarchive& oarc) const {
+    oarc << bool(vid_vec.size() == 0);
+    if (vid_vec.size() == 0) oarc << v;
+    else oarc << vid_vec;
     oarc << n1 << n2 << n2e << n2c << n3;
   }
 
   // deserialize
   void load(graphlab::iarchive& iarc) {
+    bool novvec;
+    v = (graphlab::vertex_id_type)(-1);
+    vid_vec.clear();
+    iarc >> novvec;
+    if (novvec) iarc >> v;
+    else iarc >> vid_vec;
     iarc >> n1 >> n2 >> n2e >> n2c >> n3;
   }
+
 };
+
 
 // To collect the set of neighbors, we need a message type which is
 // basically a set of vertex IDs
@@ -631,6 +708,8 @@ public:
                               const vertex_type& vertex) const {
     return graphlab::NO_EDGES;
   }
+
+  //scatter to signal vertex id 0 and its neighbors here??
 };
 
 
@@ -641,9 +720,10 @@ public:
  * If per_vertex output is not necessary, we can use the optimization
  * where each vertex only accumulates neighbors with greater vertex IDs.
  */
-class triangle_count :
+
+class iterated_ego_count :
       public graphlab::ivertex_program<graph_type,
-                                      set_union_gather>,
+                                      set_union_sum_gather>,
       /* I have no data. Just force it to POD */
       public graphlab::IS_POD_TYPE  {
 public:
@@ -663,27 +743,119 @@ public:
   gather_type gather(icontext_type& context,
                      const vertex_type& vertex,
                      edge_type& edge) const {
-    set_union_gather gather;
-    if(edge.data().in_ego_indicator == 0){
-    // if(edge.data().sample_indicator == 0){
-      gather.v = -1; 
+    set_union_sum_gather gather;
+    // std::cout << "Iteration: " << context.iteration() << ", ego 3 profile G "<< vertex.id() 
+    // << ", sego: " << edge.source().data().in_ego_indicator << ", tego: " << edge.target().data().in_ego_indicator
+    // << std::endl; 
+    // if (GASphase == 0) { //set union
+    if (context.iteration()%5 ==1) {
+      gather.union_flag = 1;
+      if((edge.source().data().in_ego_indicator == 0) || (edge.target().data().in_ego_indicator == 0)) {
+      // if(edge.data().in_ego_indicator == 0){
+      // if(edge.data().sample_indicator == 0){
+        gather.v = -1; 
+      }
+      else{
+        graphlab::vertex_id_type otherid = edge.target().id() == vertex.id() ?
+                                         edge.source().id() : edge.target().id();
+
+      // size_t other_nbrs = (edge.target().id() == vertex.id()) ?
+      //     (edge.source().num_in_edges() + edge.source().num_out_edges()): 
+      //     (edge.target().num_in_edges() + edge.target().num_out_edges());
+
+      // size_t my_nbrs = vertex.num_in_edges() + vertex.num_out_edges();
+
+      //if (PER_VERTEX_COUNT || (other_nbrs > my_nbrs) || (other_nbrs == my_nbrs && otherid > vertex.id())) {
+      //if (PER_VERTEX_COUNT || otherid > vertex.id()) {
+        gather.v = otherid; //will this work? what is v??
+      //} 
+     } 
+     // ego_edges += 1; //get the total number of edges in this ego??
+     gather.n1 = 0;
+     gather.n2 = 0;
+     gather.n2e = 0;
+     gather.n2c = 0;
+     gather.n3 = 0;
+     return gather;
     }
-    else{
-      graphlab::vertex_id_type otherid = edge.target().id() == vertex.id() ?
-                                       edge.source().id() : edge.target().id();
+    
+    else if (context.iteration()%5 ==2) { //ego_edge
+      gather.union_flag = 0;
+      if (edge.target().id() == vertex.id()) {
+        gather.n1 = edge.source().data().vid_set.size();
+      }
+      else {
+        gather.n1 = edge.target().data().vid_set.size();
+      }
+      
+      gather.n2 = 0;
+      gather.n2e = 0;
+      gather.n2c = 0;
+      gather.n3 = 0;
+      gather.v = -1; 
+      return gather;
+    }
 
-    // size_t other_nbrs = (edge.target().id() == vertex.id()) ?
-    //     (edge.source().num_in_edges() + edge.source().num_out_edges()): 
-    //     (edge.target().num_in_edges() + edge.target().num_out_edges());
+    // else if (GASphase==1) { //edge sum
+    else if (context.iteration()%5 ==3) { //edge sum
+      gather.union_flag = 0;
+      if((edge.source().data().in_ego_indicator == 1) && (edge.target().data().in_ego_indicator == 1)) {
+      // if (edge.data().in_ego_indicator == 1){
+        //return edge.data();
+        // std::cout << "Edge (" << edge.source().id() << "," << edge.target().id() << "): " << edge.data().n3
+        // << " triangles" << std::endl;
+        gather.n1 = edge.data().n1;
+        gather.n2 = edge.data().n2;
+        gather.n3 = edge.data().n3;
+        if (vertex.id() == edge.source().id()){
+          gather.n2e = edge.data().n2e;
+          gather.n2c = edge.data().n2c;
+        }
+        else{
+          gather.n2e = edge.data().n2c;
+          gather.n2c = edge.data().n2e;
+        }
+      }
+      else{
+        gather.n1 = 0;
+        gather.n2 = 0;
+        gather.n2e = 0;
+        gather.n2c = 0;
+        gather.n3 = 0;
+      }
+      gather.v = -1; 
+      return gather;
+    }
+    else if (context.iteration()%5 == 4) {
+      gather.union_flag = 0;
+      //reduce on the ego vertex, reuse the ns
+      if (vertex.id() == edge.target().id()) {
+        gather.n3 = edge.source().data().num_triangles;
+        gather.n2 = edge.source().data().num_wedges;
+        gather.n2e = edge.source().data().num_disc;
+        gather.n1 = edge.source().data().num_empty;
+      }
+      else {
+        gather.n3 = edge.target().data().num_triangles;
+        gather.n2 = edge.target().data().num_wedges;
+        gather.n2e = edge.target().data().num_disc;
+        gather.n1 = edge.target().data().num_empty;
+      }
 
-    // size_t my_nbrs = vertex.num_in_edges() + vertex.num_out_edges();
-
-    //if (PER_VERTEX_COUNT || (other_nbrs > my_nbrs) || (other_nbrs == my_nbrs && otherid > vertex.id())) {
-    //if (PER_VERTEX_COUNT || otherid > vertex.id()) {
-      gather.v = otherid; //will this work? what is v??
-    //} 
-   } 
-   return gather;
+      gather.v = -1;
+      gather.n2c = 0;
+      return gather; //necessary?
+    }
+    else {
+      gather.union_flag = 0;
+      gather.n1 = 0;
+      gather.n2 = 0;
+      gather.n2e = 0;
+      gather.n2c = 0;
+      gather.n3 = 0;
+      gather.v = -1;
+      return gather;
+    }
   }
 
   /*
@@ -691,20 +863,115 @@ public:
    * store it on the vertex. 
    */
   void apply(icontext_type& context, vertex_type& vertex,
-             const gather_type& neighborhood) {
-   do_not_scatter = false;
-   if (neighborhood.vid_vec.size() == 0) {
-     // neighborhood set may be empty or has only 1 element
-     vertex.data().vid_set.clear();
-     if (neighborhood.v != (graphlab::vertex_id_type(-1))) {
-       vertex.data().vid_set.vid_vec.push_back(neighborhood.v);
+             const gather_type& neighborhood_ecounts) {
+   // std::cout << "Iteration: " << context.iteration() << ", ego 3 profile A "<< vertex.id() << std::endl; 
+   // if (GASphase == 0) { //count triangles
+   if (context.iteration()%5 ==1) {
+     do_not_scatter = false;
+     if (neighborhood_ecounts.vid_vec.size() == 0) {
+       // neighborhood set may be empty or has only 1 element
+       vertex.data().vid_set.clear();
+       if (neighborhood_ecounts.v != (graphlab::vertex_id_type(-1))) {
+         vertex.data().vid_set.vid_vec.push_back(neighborhood_ecounts.v);
+       }
      }
+     else {
+       vertex.data().vid_set.assign(neighborhood_ecounts.vid_vec);
+     }
+     do_not_scatter = vertex.data().vid_set.size() == 0;
+    
+    size_t tosig = context.iteration()/5;  
+    if (tosig < context.num_vertices()) //is this check necessary?
+      context.signal_vid( (graphlab::vertex_id_type)tosig ); //signal to get ego_edges
+
+   }
+   
+   else if (context.iteration()%5 ==2) { //ego_edges
+    // ego_edges = neighborhood_ecounts.n1 - vertex.data().vid_set_ORIG.size();
+    //update global var, or separate vertex data then pass to edge data?
+    vertex.data().ego_edge_count = neighborhood_ecounts.n1/2; //double counted!
+   }
+
+   // else if (GASphase==1){ //per vertex count
+   else if (context.iteration()%5 ==3) {
+    vertex.data().num_triangles = neighborhood_ecounts.n3 / 2;
+    //vertex.data().num_wedges = ecounts.n2 - ( pow(vertex.data().vid_set.size(),2) + 3*vertex.data().vid_set.size() )/2 +
+      //  vertex.data().num_triangles;
+
+    // std::cout << "Ego edges: " << vertex.data().ego_edge_count << std::endl;
+    // std::cout << "Ego vertices: " << ego_vertices << std::endl;
+    // std::cout << "neighborhood size: " << vertex.data().vid_set.size() << std::endl;
+
+
+    vertex.data().num_wedges_c = neighborhood_ecounts.n2c/2;
+    vertex.data().num_wedges_e = neighborhood_ecounts.n2e;
+    vertex.data().num_wedges = vertex.data().num_wedges_e + vertex.data().num_wedges_c;
+
+    // if (vertex.data().num_wedges > 1e19) {
+    //   std::cout<< "iteration " << context.iteration() << ", ego " << context.iteration()/5 << ", vertex "<<vertex.id()<<", n2e is "<<neighborhood_ecounts.n2e<<std::endl;
+    //   // std::cout<<"vertex "<<vertex.id()<<", n2c is "<<neighborhood_ecounts.n2c<<std::endl;
+    // }
+
+    // vertex.data().num_disc = ecounts.n1 + /*context.num_edges()*/total_edges - 3*vertex.data().num_triangles + pow(vertex.data().vid_set.size(),2) - ecounts.n2; //works for small example?????
+    vertex.data().num_disc = neighborhood_ecounts.n1 + vertex.data().ego_edge_count - vertex.data().vid_set.size() - vertex.data().num_triangles - vertex.data().num_wedges_e; //new eq??
+    // vertex.data().num_empty = (context.num_vertices()  - 1)*(context.num_vertices() - 2)/2 - 
+    vertex.data().num_empty = (vertex.data().ego_vertices  - 1)*(vertex.data().ego_vertices - 2)/2 -
+        (vertex.data().num_triangles + vertex.data().num_wedges + vertex.data().num_disc);
+    vertex.data().vid_set.clear(); //still necessary when iterating, ORIG not cleared but this is
+    //print the answers, and save to a log file at the command line?
+    //signal the ego center vertex for reduction
+    // std::cout << "Reducing on vertex: " << context.iteration()/5 << std::endl;
+    context.signal_vid( (graphlab::vertex_id_type) (context.iteration()/5) );
+
+
+
+    // edge.source().data().in_ego_indicator = 0;
+    // edge.target().data().in_ego_indicator = 0;
+    //signal???!?! vertex with id context.iteration()/2 + 1, and its neighbors (edge.target.id() edge.source.id())??
+    // graphlab::vertex_id_type tosig = context.iteration()/2 + 1;  
+    
+
+   }
+   else if (context.iteration()%5 ==4) {
+    //get a final count, signal the next id
+    //store (too much space...) or just print??
+    if (PER_VERTEX_COUNT) {
+      std::cout << 
+      // // "Iteration: " << context.iteration() << ", ego 3 profile "<< 
+      vertex.id() << "\t" 
+      << (neighborhood_ecounts.n3/3)/pow(sample_prob_keep, 3) << "\t" 
+      << (neighborhood_ecounts.n2/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(neighborhood_ecounts.n3/3)/pow(sample_prob_keep, 2) << "\t"
+      << (neighborhood_ecounts.n2e/3)/sample_prob_keep - (1-sample_prob_keep)*(neighborhood_ecounts.n2/3)/pow(sample_prob_keep, 2)<< "\t" 
+      << (neighborhood_ecounts.n1/3) - (1-sample_prob_keep)*(neighborhood_ecounts.n2e/3)/sample_prob_keep << std::endl;
+    }
+    
+    size_t tosig = context.iteration()/5 + 1;  
+    if (tosig < context.num_vertices()) {
+      // std::cout << "Iteration: " << context.iteration()
+      // << " finished, now signaling vertex id: " << context.iteration()/5 + 1 << std::endl;
+      context.signal_vid( (graphlab::vertex_id_type)tosig );
+    }
+
    }
    else {
-     vertex.data().vid_set.assign(neighborhood.vid_vec);
+   
+
+    //signal all neighbors, (no apply or scatter) or (no gather or apply)?
+    // context.signal_neighbors(graphlab::ALL_EDGES);
+    // context.broadcast_signal(graphlab::ALL_EDGES);
+    // contxt.signal_vset(neighborhood)
+
+    // if (vertex.id() == edge.target().id()) {
+    //   context.signal(edge.source());
+    //   edge.source().data().in_ego_indicator = 1; //where is this cleared?
+    // }
+    // else {
+    //   context.signal(edge.target());
+    //   edge.target().data().in_ego_indicator = 1;
+    // }
    }
-   do_not_scatter = vertex.data().vid_set.size() == 0;
-  } // end of apply
+ }
+
 
   /*
    * Scatter over all edges to compute the intersection.
@@ -713,8 +980,26 @@ public:
    */
   edge_dir_type scatter_edges(icontext_type& context,
                               const vertex_type& vertex) const {
-    if (do_not_scatter) return graphlab::NO_EDGES;
+    // if (GASphase==2) {
+    // if (context.iteration()%5 ==0 || context.iteration()%5 ==2) {
+    if (context.iteration()%5 ==0 || context.iteration()%5 ==2 || context.iteration()%5==3) {
+      return graphlab::ALL_EDGES;
+    } 
+      // if (GASphase==0) {
+        // if (do_not_scatter) return graphlab::NO_EDGES;
+        // if (GASphase==0 && do_not_scatter) return graphlab::NO_EDGES;
+    else if ((context.iteration()%5 ==1 && do_not_scatter) || (context.iteration()%5==4))
+        return graphlab::NO_EDGES;
+      // else if (context.iteration()%5==4) {
+        // std::cout << "signaled." << std::endl;
+        // return graphlab::NO_EDGES;
+    // }
     else return graphlab::OUT_EDGES;
+      // }
+      // else { 
+      //   return graphlab::NO_EDGES; //still?????? or setup the next one
+      // }
+      // }
   }
 
 
@@ -726,34 +1011,102 @@ public:
   void scatter(icontext_type& context,
               const vertex_type& vertex,
               edge_type& edge) const {
-    //    vertex_type othervtx = edge.target();
-    if (edge.data().in_ego_indicator == 1){
-    // if (edge.data().sample_indicator == 1){
-      const vertex_data_type& srclist = edge.source().data();
-      const vertex_data_type& targetlist = edge.target().data();
-      size_t tmp= 0, tmp2 = 0;
-      if (targetlist.vid_set.size() < srclist.vid_set.size()) {
-        //edge.data() += count_set_intersect(targetlist.vid_set, srclist.vid_set);
-        //will this work with += increment??
-        tmp = count_set_intersect(targetlist.vid_set, srclist.vid_set);
-      }
-      else {
-        //edge.data() += count_set_intersect(srclist.vid_set, targetlist.vid_set);
-        tmp = count_set_intersect(srclist.vid_set, targetlist.vid_set);
-      }
-      tmp2 = srclist.vid_set.size() + targetlist.vid_set.size();
-      edge.data().n3 = tmp;
-      edge.data().n2 =  tmp2 - 2*tmp;
-      
-      edge.data().n2c = srclist.vid_set.size() - tmp - 1;
-      edge.data().n2e = targetlist.vid_set.size() - tmp - 1;       
+    // std::cout << "Iteration: " << context.iteration() << ", ego 3 profile S "<< vertex.id() << std::endl; 
+    // if (GASphase==0) {
+    if (context.iteration()%5 ==1) {
+      //    vertex_type othervtx = edge.target();
+      if((edge.source().data().in_ego_indicator == 1) && (edge.target().data().in_ego_indicator == 1)) {
+      // if (edge.data().in_ego_indicator == 1){
+      // if (edge.data().sample_indicator == 1){
+        const vertex_data_type& srclist = edge.source().data();
+        const vertex_data_type& targetlist = edge.target().data();
+        size_t tmp= 0, tmp2 = 0;
+        if (targetlist.vid_set.size() < srclist.vid_set.size()) {
+          //edge.data() += count_set_intersect(targetlist.vid_set, srclist.vid_set);
+          //will this work with += increment??
+          tmp = count_set_intersect(targetlist.vid_set, srclist.vid_set);
+        }
+        else {
+          //edge.data() += count_set_intersect(srclist.vid_set, targetlist.vid_set);
+          tmp = count_set_intersect(srclist.vid_set, targetlist.vid_set);
+        }
+        tmp2 = srclist.vid_set.size() + targetlist.vid_set.size();
+        edge.data().n3 = tmp;
+        edge.data().n2 =  tmp2 - 2*tmp;
+        
+        edge.data().n2c = srclist.vid_set.size() - tmp - 1;
+        edge.data().n2e = targetlist.vid_set.size() - tmp - 1;       
 
-      // edge.data().n1 = context.num_vertices() - (tmp2 - tmp);
-      // edge.data().n1 = context.num_vertices() - (tmp2 - tmp);
-      edge.data().n1 = ego_vertices - (tmp2 - tmp);
+        // if (edge.data().n2e > 1e19) {
+        //   std::cout << "iteration " << context.iteration() << ", ego " << context.iteration()/5 << " at scatter, n2e (" << edge.source().id() << "," << edge.target().id() 
+        //   << "): " << targetlist.vid_set.size() << " minus "
+        //   << tmp << " minus 1" << std::endl;
+        //   // std::cout << "flags: " << edge.source().data().in_ego_indicator << ", " << edge.target().data().in_ego_indicator << std::endl; //WHY!!!!
+        // }
+
+        // edge.data().n1 = context.num_vertices() - (tmp2 - tmp);
+        // edge.data().n1 = context.num_vertices() - (tmp2 - tmp);
+        edge.data().n1 = edge.target().data().ego_vertices - (tmp2 - tmp);
+      }
+      // GASphase = 1;
+      //signal everything currently on to do another iteration
+      // context.signal(vertex);
+      //not anymore, now signal the center to get ego_edges in apply
     }
-  }
+    else if (context.iteration()%5 ==2) { //ego_edges, scatter to neighbors for counts
+      if (vertex.id() == edge.target().id()) {
+        context.signal(edge.source());
+        edge.source().data().ego_edge_count = vertex.data().ego_edge_count;
+      }
+      else if (vertex.id() == edge.source().id()) {
+        context.signal(edge.target());
+        edge.target().data().ego_edge_count = vertex.data().ego_edge_count;
+      }
+    }
 
+    // else if (GASphase==1){
+    else if (context.iteration()%5 ==3) {
+      //for some reason, scatter on all edges instead of just out edges......
+      // if((edge.source().data().in_ego_indicator == 1) && (edge.target().data().in_ego_indicator == 1)) {
+        edge.source().data().in_ego_indicator = 0;
+        edge.target().data().in_ego_indicator = 0;
+
+      
+        // if (context.iteration()==3 && (edge.source().id()<336 && edge.target().id()<336)) {
+          // std::cout << "off: " << edge.source().id() << ", " << edge.target().id() << std::endl;
+        // }
+      // }
+      // //signal???!?! vertex with id context.iteration()/2 + 1, and its neighbors (edge.target.id() edge.source.id())??
+      // // graphlab::vertex_id_type tosig = context.iteration()/2 + 1;  
+      // graphlab::vertex_id_type tosig = context.iteration()/3 + 1;  
+      // std::cout << "Iteration: " << context.iteration()
+      // // << " finished, now signalling vertex id: " << context.iteration()/2 + 1 << std::endl;
+      // << " finished, now signalling vertex id: " << context.iteration()/3 + 1 << std::endl;
+      // context.signal_vid( (graphlab::vertex_id_type)tosig );
+      // GASphase = 2;
+    }
+    else if (context.iteration()%5 == 0){
+      // std::cout << "Iteration: " << context.iteration() << " signaling neighbors" << std::endl;
+      //signal neighbors, (no apply or scatter) or (no gather or apply)?
+      if (vertex.id() == edge.target().id()) {
+        context.signal(edge.source());
+        edge.source().data().in_ego_indicator = 1; //where is this cleared?
+        edge.source().data().ego_vertices = vertex.data().vid_set_ORIG.size();
+        // if (vertex.id()==1) std::cout << "1s nbh " << edge.source().id() << std::endl;
+      }
+      else if (vertex.id() == edge.source().id()) {
+        context.signal(edge.target());
+        edge.target().data().in_ego_indicator = 1;
+        edge.target().data().ego_vertices = vertex.data().vid_set_ORIG.size();
+        // if (vertex.id()==1) std::cout << "1s nbh " << edge.target().id() << std::endl;
+      }
+      //set the number of ego vertices here? what about ego edges??
+      // ego_vertices = vertex.data().vid_set_ORIG.size(); //now vertex data
+      // ego_edges = 0;
+      // GASphase = 0; //ONLY ON THE LAST SCATTER??? maybe change to vertex data or mod the iteration
+    }
+  
+  }
   // graphlab::empty signal_vertex_ego(icontext_type& ctx, 
   //                   const graph_type::vertex_type& vertex) {
   //   if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
@@ -764,96 +1117,7 @@ public:
   // }
 };
 
-/*
- * This class is used in a second engine call if per vertex counts are needed.
- * The number of triangles a vertex is involved in can be computed easily
- * by summing over the number of triangles each adjacent edge is involved in
- * and dividing by 2. 
- */
-class get_per_vertex_count :
-      // public graphlab::ivertex_program<graph_type, size_t>,
-      public graphlab::ivertex_program<graph_type, edge_sum_gather>,
-      /* I have no data. Just force it to POD */
-      public graphlab::IS_POD_TYPE  {
-public:
-  // Gather on all edges
-  edge_dir_type gather_edges(icontext_type& context,
-                             const vertex_type& vertex) const {
-    return graphlab::ALL_EDGES;
-  }
-  // We gather the number of triangles each edge is involved in
-  // size_t gather(icontext_type& context,
-  gather_type gather(icontext_type& context,
-                     const vertex_type& vertex,
-                     edge_type& edge) const {
-    edge_sum_gather gather;
-    // if (edge.data().sample_indicator == 1){
-    if (edge.data().in_ego_indicator == 1){
-      //return edge.data();
-      gather.n1 = edge.data().n1;
-      gather.n2 = edge.data().n2;
-      gather.n3 = edge.data().n3;
-      if (vertex.id() == edge.source().id()){
-        gather.n2e = edge.data().n2e;
-        gather.n2c = edge.data().n2c;
-      }
-      else{
-        gather.n2e = edge.data().n2c;
-        gather.n2c = edge.data().n2e;
-      }
-    }
-    else{
-      gather.n1 = 0;
-      gather.n2 = 0;
-      gather.n2e = 0;
-      gather.n2c = 0;
-      gather.n3 = 0;
-    }
-    return gather;
-  }
 
-  /* the gather result is the total sum of the number of triangles
-   * each adjacent edge is involved in . Dividing by 2 gives the
-   * desired result.
-   */
-  void apply(icontext_type& context, vertex_type& vertex,
-             const gather_type& ecounts) {
-    //vertex.data().num_triangles = num_triangles / 2;
-    //vid_set.size() or vid_vec.size()
-    vertex.data().num_triangles = ecounts.n3 / 2;
-    // std::cout<<"vertex"<<vertex.id()<<", tri is "<<vertex.data().num_triangles<<std::endl;
-    //vertex.data().num_wedges = ecounts.n2 - ( pow(vertex.data().vid_set.size(),2) + 3*vertex.data().vid_set.size() )/2 +
-      //  vertex.data().num_triangles;
-
-    vertex.data().num_wedges_c = ecounts.n2c/2;
-    vertex.data().num_wedges_e = ecounts.n2e;
-    vertex.data().num_wedges = vertex.data().num_wedges_e + vertex.data().num_wedges_c;
-
-    // vertex.data().num_disc = ecounts.n1 + /*context.num_edges()*/total_edges - 3*vertex.data().num_triangles + pow(vertex.data().vid_set.size(),2) - ecounts.n2; //works for small example?????
-    vertex.data().num_disc = ecounts.n1 + ego_edges - vertex.data().vid_set.size() - vertex.data().num_triangles - vertex.data().num_wedges_e; //new eq??
-    // vertex.data().num_empty = (context.num_vertices()  - 1)*(context.num_vertices() - 2)/2 - 
-    vertex.data().num_empty = (ego_vertices  - 1)*(ego_vertices - 2)/2 - //now vertices choose 3
-        (vertex.data().num_triangles + vertex.data().num_wedges + vertex.data().num_disc);
-    vertex.data().vid_set.clear(); //still necessary when iterating, ORIG not cleared but this is
-  }
-
-  // No scatter
-  edge_dir_type scatter_edges(icontext_type& context,
-                             const vertex_type& vertex) const {
-    return graphlab::NO_EDGES;
-  }
-
-  // graphlab::empty signal_vertex_ego2(icontext_type& ctx,
-  //                     const graph_type::vertex_type& vertex) {
-  //   if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
-  //       ctx.signal(vertex);
-  //       // std::cout<<"Ego vertex "<<ego_center<< ": signalling vertex "<<vertex.id()<<std::endl;
-  //   }
-  //   return graphlab::empty();
-  // }
-
-
-};
 
 //typedef graphlab::synchronous_engine<triangle_count> engine_type;
 
@@ -878,9 +1142,6 @@ size_t get_edge_sample_indicator(const graph_type::edge_type& e){
         return e.data().sample_indicator;
 }
 
-size_t get_edge_ego_indicator(const graph_type::edge_type& e){
-        return e.data().in_ego_indicator;
-}
 
 size_t get_vertex_ego_indicator(const graph_type::vertex_type& v){
         return v.data().in_ego_indicator;
@@ -906,34 +1167,8 @@ void ego_vertex(graph_type::vertex_type& vertex) {
     vertex.data().in_ego_indicator = 0;
 }
 
-void ego_edge_prune(graph_type::edge_type& edge) {
-  //keep if both endpoints are connected to ego center
-  if (edge.data().sample_indicator==1 && edge.source().data().in_ego_indicator==1 && edge.target().data().in_ego_indicator==1)
-    edge.data().in_ego_indicator = 1;
-  else
-    edge.data().in_ego_indicator = 0; 
-}
 
-graphlab::empty signal_vertex_ego(graphlab::synchronous_engine<triangle_count>::icontext_type& ctx,
-                                     const graph_type::vertex_type& vertex) {
-  // if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
-  if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center))) {
-      ctx.signal(vertex);
-      // std::cout<<"Ego vertex "<<ego_center<< ": signalling vertex "<<vertex.id()<<std::endl;
-  }
-  return graphlab::empty();
-}
-//there has to be a better way than writing a signal function for each engine/class
-//include in the class definition???
-graphlab::empty signal_vertex_ego2(graphlab::synchronous_engine<get_per_vertex_count>::icontext_type& ctx,
-                                     const graph_type::vertex_type& vertex) {
-  // if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center)) || (vertex.id()==ego_center)) {
-  if ((std::binary_search(vertex.data().vid_set_ORIG.vid_vec.begin(), vertex.data().vid_set_ORIG.vid_vec.end(), ego_center))) {
-      ctx.signal(vertex);
-      // std::cout<<"Ego vertex "<<ego_center<< ": signalling vertex "<<vertex.id()<<std::endl;
-  }
-  return graphlab::empty();
-}
+
 
 
 /*
@@ -1052,10 +1287,10 @@ clopts.attach_option("prob_step", prob_step,
     dc.cout() << "Iteration " << sit+1 << " of " << sample_iter << ". current sample prob: " << sample_prob_keep <<std::endl;
 
 
-    size_t num_h10 = 0; //total cliques in the graph (for debugging)
-    size_t num_h9 = 0; //total cliques in the graph (for debugging)
-    size_t num_h8 = 0; //total cliques in the graph (for debugging)
-    size_t num_h6 = 0; //total cliques in the graph (for debugging)
+    // size_t num_h10 = 0; //total cliques in the graph (for debugging)
+    // size_t num_h9 = 0; //total cliques in the graph (for debugging)
+    // size_t num_h8 = 0; //total cliques in the graph (for debugging)
+    // size_t num_h6 = 0; //total cliques in the graph (for debugging)
 
     graphlab::timer ti;
     
@@ -1076,120 +1311,130 @@ clopts.attach_option("prob_step", prob_step,
 
 
     // create engine to count the number of triangles
-    dc.cout() << "Counting 3-profiles..." << std::endl;
-    graphlab::synchronous_engine<triangle_count> engine1(dc, graph, clopts);
-    // engine_type engine(dc, graph, clopts);
-
-    //NAIVELY LOOP OVER VERTICES TO GET EGO SUBGRAPHS
-    if (PER_VERTEX_COUNT == true) {
-      std::ofstream myfile;
-      char fname[20];
-      sprintf(fname,"3_egos_%d.txt",dc.procid());
-      bool is_new_file = true;
-      if (std::ifstream(fname)){
-        is_new_file = false;
-      }
-      myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::trunc);
-      myfile << "id\ttriangles\twedges\tdisc\tempty" << std::endl;
-      myfile.close();
-    }    
+    dc.cout() << "Counting Ego subgraphs..." << std::endl;
     
-    // foreach(graphlab::vertex_id_type vid, MAX_VID_VEC) {
-    for (size_t e=0; e<graph.num_vertices(); e++) { //WRONG! assumes vertices are labelled 0 through number - 1
-      graph.transform_vertices(init_vertex); //clear anything that was signalled last time but not this time?
-      ego_center = e;
-      //get ego subgraph
-      dc.cout() << "Ego subgraph for vertex " << ego_center << std::endl;
-      graph.transform_vertices(ego_vertex);
-      // graph.transform_edges(ego_edge_prune);
 
-      //or make a new graph instead
-      //egraph = ??
-
-      //signalling? then only the signalled vertices/edges will be run when call engine.start()
-      //signal_neighbors
-      engine1.map_reduce_vertices<graphlab::empty>(signal_vertex_ego);
-      // engine1.map_reduce_vertices<graphlab::empty>(triangle_count::signal_vertex_ego);
-      graph.transform_edges(ego_edge_prune);      
-      //only run on vertices included in ego subgraph, and only include edges between these vertices
+    //NEW CODE
+    graphlab::synchronous_engine<iterated_ego_count> engine12it(dc, graph, clopts);
+    engine12it.signal(0);
+    // GASphase = 2; //signal the neighbors of vertex with id 0
+    engine12it.start();
     
-      ego_vertices = graph.map_reduce_vertices<size_t>(get_vertex_ego_indicator);
-      ego_edges = graph.map_reduce_edges<size_t>(get_edge_ego_indicator);
-      dc.cout() << "Ego ("<< ego_center<< ") vertices: " << ego_vertices << std::endl;
-      dc.cout() << "Ego ("<< ego_center<< ") edges: " << ego_edges << std::endl;
+    // dc.cout() << "NEW 3-profiles finished, looping over engine..." << std::endl;
 
-      // engine1.signal_all();
-      engine1.start();
+    // graphlab::synchronous_engine<triangle_count> engine1(dc, graph, clopts);
+    // // engine_type engine(dc, graph, clopts);
+
+    // //NAIVELY LOOP OVER VERTICES TO GET EGO SUBGRAPHS
+    // if (PER_VERTEX_COUNT == true) {
+    //   std::ofstream myfile;
+    //   char fname[20];
+    //   sprintf(fname,"3_egos_%d.txt",dc.procid());
+    //   bool is_new_file = true;
+    //   if (std::ifstream(fname)){
+    //     is_new_file = false;
+    //   }
+    //   myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::trunc);
+    //   myfile << "id\ttriangles\twedges\tdisc\tempty" << std::endl;
+    //   myfile.close();
+    // }    
+    
+    // // foreach(graphlab::vertex_id_type vid, MAX_VID_VEC) {
+    // for (size_t e=0; e<graph.num_vertices(); e++) { //WRONG! assumes vertices are labelled 0 through number - 1
+    //   graph.transform_vertices(init_vertex); //clear anything that was signalled last time but not this time?
+    //   ego_center = e;
+    //   //get ego subgraph
+    //   dc.cout() << "Ego subgraph for vertex " << ego_center << std::endl;
+    //   graph.transform_vertices(ego_vertex);
+    //   // graph.transform_edges(ego_edge_prune);
+
+    //   //or make a new graph instead
+    //   //egraph = ??
+
+    //   //signalling? then only the signalled vertices/edges will be run when call engine.start()
+    //   //signal_neighbors
+    //   engine1.map_reduce_vertices<graphlab::empty>(signal_vertex_ego);
+    //   // engine1.map_reduce_vertices<graphlab::empty>(triangle_count::signal_vertex_ego);
+    //   graph.transform_edges(ego_edge_prune);      
+    //   //only run on vertices included in ego subgraph, and only include edges between these vertices
+    
+    //   ego_vertices = graph.map_reduce_vertices<size_t>(get_vertex_ego_indicator);
+    //   ego_edges = graph.map_reduce_edges<size_t>(get_edge_ego_indicator);
+    //   dc.cout() << "Ego ("<< ego_center<< ") vertices: " << ego_vertices << std::endl;
+    //   dc.cout() << "Ego ("<< ego_center<< ") edges: " << ego_edges << std::endl;
+
+    //   // engine1.signal_all();
+    //   engine1.start();
 
 
-      //dc.cout() << "Round 1 Counted in " << ti.current_time() << " seconds" << std::endl;
+    //   //dc.cout() << "Round 1 Counted in " << ti.current_time() << " seconds" << std::endl;
       
-      //Sanity check for total edges count and degrees
-      //total_edges = graph.map_reduce_vertices<size_t>(get_vertex_degree)/2;  
-      //dc.cout() << "Total edges counted (after sampling) using degrees:" << total_edges << std::endl;
+    //   //Sanity check for total edges count and degrees
+    //   //total_edges = graph.map_reduce_vertices<size_t>(get_vertex_degree)/2;  
+    //   //dc.cout() << "Total edges counted (after sampling) using degrees:" << total_edges << std::endl;
 
-      //cannot put second engine before conditional?
-      //graphlab::timer ti2;
+    //   //cannot put second engine before conditional?
+    //   //graphlab::timer ti2;
       
-      graphlab::synchronous_engine<get_per_vertex_count> engine2(dc, graph, clopts);
-      // engine2.signal_all();
-      engine2.map_reduce_vertices<graphlab::empty>(signal_vertex_ego2); //another signal function??
-      // engine2.map_reduce_vertices<graphlab::empty>(get_per_vertex_count::signal_vertex_ego2); //another signal function??
-      engine2.start();
-      //dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
-      //dc.cout() << "Total Running time is: " << ti.current_time() << "seconds" << std::endl;
-      vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
+    //   graphlab::synchronous_engine<get_per_vertex_count> engine2(dc, graph, clopts);
+    //   // engine2.signal_all();
+    //   engine2.map_reduce_vertices<graphlab::empty>(signal_vertex_ego2); //another signal function??
+    //   // engine2.map_reduce_vertices<graphlab::empty>(get_per_vertex_count::signal_vertex_ego2); //another signal function??
+    //   engine2.start();
+    //   //dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
+    //   //dc.cout() << "Total Running time is: " << ti.current_time() << "seconds" << std::endl;
+    //   vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
 
-      num_h10 += global_counts.num_triangles/3;
-      num_h9 += global_counts.num_wedges/3;
-      num_h8 += global_counts.num_disc/3;
-      num_h6 += global_counts.num_empty/3;
-      // if (PER_VERTEX_COUNT == false) {
+    //   num_h10 += global_counts.num_triangles/3;
+    //   num_h9 += global_counts.num_wedges/3;
+    //   num_h8 += global_counts.num_disc/3;
+    //   num_h6 += global_counts.num_empty/3;
+    //   // if (PER_VERTEX_COUNT == false) {
         
-       //  // size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
-       //  //size_t denom = 1;
-       //  //dc.cout() << "denominator: " << denom << std::endl;
-       // // dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
-       //  // dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
-       //  dc.cout() << "Ego ("<< ego_center<< ") count from estimators: " 
-    	  //     << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
-    	  //     << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
-     	 //      << (global_counts.num_disc/3)/sample_prob_keep - (1-sample_prob_keep)*(global_counts.num_wedges/3)/pow(sample_prob_keep, 2) << " "
-    	  //     << (global_counts.num_empty/3)-(1-sample_prob_keep)*(global_counts.num_disc/3)/sample_prob_keep  << " "
-    	  //     << std::endl;
+    //    //  // size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
+    //    //  //size_t denom = 1;
+    //    //  //dc.cout() << "denominator: " << denom << std::endl;
+    //    // // dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
+    //    //  // dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
+    //    //  dc.cout() << "Ego ("<< ego_center<< ") count from estimators: " 
+    // 	  //     << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
+    // 	  //     << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
+    //  	 //      << (global_counts.num_disc/3)/sample_prob_keep - (1-sample_prob_keep)*(global_counts.num_wedges/3)/pow(sample_prob_keep, 2) << " "
+    // 	  //     << (global_counts.num_empty/3)-(1-sample_prob_keep)*(global_counts.num_disc/3)/sample_prob_keep  << " "
+    // 	  //     << std::endl;
 
         
-      // }
+    //   // }
 
-      if (PER_VERTEX_COUNT == true) { //these must be redefined in each new conditional?
-          // if (myfile.is_open()) {
-           std::ofstream myfile;
-           char fname[20];
-           sprintf(fname,"3_egos_%d.txt",dc.procid());
-           myfile.open(fname,std::fstream::in | std::fstream::out | std::fstream::app);
-           myfile << ego_center << "\t"
-           << std::setprecision (std::numeric_limits<double>::digits10 + 3)
-           << round((global_counts.num_triangles/3)/pow(sample_prob_keep, 3)) << "\t"
-           << round((global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3)) << "\t"
-           << round((global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2)) << "\t"
-           << round((global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep)  << "\t"
-           << std::endl;
-          // }
-           myfile.close();
-      }
+    //   if (PER_VERTEX_COUNT == true) { //these must be redefined in each new conditional?
+    //       // if (myfile.is_open()) {
+    //        std::ofstream myfile;
+    //        char fname[20];
+    //        sprintf(fname,"3_egos_%d.txt",dc.procid());
+    //        myfile.open(fname,std::fstream::in | std::fstream::out | std::fstream::app);
+    //        myfile << ego_center << "\t"
+    //        << std::setprecision (std::numeric_limits<double>::digits10 + 3)
+    //        << round((global_counts.num_triangles/3)/pow(sample_prob_keep, 3)) << "\t"
+    //        << round((global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (global_counts.num_triangles/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 3)) << "\t"
+    //        << round((global_counts.num_disc/3)/sample_prob_keep - (global_counts.num_wedges/3)*(1-sample_prob_keep)/pow(sample_prob_keep, 2)) << "\t"
+    //        << round((global_counts.num_empty/3)-(global_counts.num_disc/3)*(1-sample_prob_keep)/sample_prob_keep)  << "\t"
+    //        << std::endl;
+    //       // }
+    //        myfile.close();
+    //   }
     
-    }
+    // }
     
 
     total_time = ti.current_time();
     dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
-    num_h10 = num_h10/4;
-    num_h9 = num_h9/2;
-    dc.cout() << "Number of ego triangles (N10): " << num_h10 << std::endl; 
-    dc.cout() << "Number of ego wedge (N9): " << num_h9 << std::endl; 
-    dc.cout() << "Number of ego disc (N8): " << num_h8 << std::endl; 
-    dc.cout() << "Number of ego empty (N6): " << num_h6 << std::endl; 
+    // num_h10 = num_h10/4;
+    // num_h9 = num_h9/2;
+    // dc.cout() << "Number of ego triangles (N10): " << num_h10 << std::endl; 
+    // dc.cout() << "Number of ego wedge (N9): " << num_h9 << std::endl; 
+    // dc.cout() << "Number of ego disc (N8): " << num_h8 << std::endl; 
+    // dc.cout() << "Number of ego empty (N6): " << num_h6 << std::endl; 
    
     std::ofstream myfile;
     char fname[20];
