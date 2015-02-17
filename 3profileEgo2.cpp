@@ -161,7 +161,7 @@ void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift)
     }
 }
 
-size_t HASH_THRESHOLD = 64;
+size_t HASH_THRESHOLD = 1000000000;//64;
 
 // We on each vertex, either a vector of sorted VIDs
 // or a hash set (cuckoo hash) of VIDs.
@@ -930,19 +930,36 @@ public:
       // interlist contains the intersection.  
       std::set_intersection(srcne.begin(),srcne.end(),trgne.begin(),trgne.end(),std::back_inserter(interlist));
       //Check for each pair of members if they have a common edge, if they do count.
-      if (interlist.size()>0){
-        for(size_t i=0;i<(interlist.size()-1);i++){
-          for(size_t j=i+1;j<interlist.size();j++){
-            for(size_t k=0;k<srclist.conn_neighbors.size();k++) {
-              if ( ((srclist.conn_neighbors.at(k).first==interlist.at(i))&&(srclist.conn_neighbors.at(k).second==interlist.at(j))) || ((srclist.conn_neighbors.at(k).first==interlist.at(j)) && (srclist.conn_neighbors.at(k).second==interlist.at(i)))) {
-              edge.data().eqn10_const++;
-              // std::cout<<srclist.conn_neighbors.at(k).first<<" with " <<srclist.conn_neighbors.at(k).second<<std::endl;
-              }
-            }
-          }
+        graphlab::hopscotch_set<graphlab::vertex_id_type> *our_cset; 
+        our_cset = new graphlab::hopscotch_set<graphlab::vertex_id_type>(64);
+        foreach (graphlab::vertex_id_type v, interlist) {
+          our_cset->insert(v);
         }
-      }
 
+//std::cout << "*** Hopscotch init time (scatter): " << ti_temp1.current_time() << " sec" << std::endl;
+
+         for(size_t k=0;k<srclist.conn_neighbors.size();k++) {
+            //graphlab::vertex_id_type num1=srclist.conn_neighbors.at(k).first;
+            //graphlab::vertex_id_type num2=srclist.conn_neighbors.at(k).second;
+            size_t flag1=0;
+      flag1 = our_cset->count(srclist.conn_neighbors.at(k).first) + our_cset->count(srclist.conn_neighbors.at(k).second);
+            //flag1 =(size_t)(our_cset->find(num1)!=our_cset->end()) + (size_t)(our_cset->find(num2)!=our_cset->end());
+            // for(size_t i=0;i<interlist.size();i++){
+            //    if((interlist.at(i)==num1)||(interlist.at(i)==num2))
+            //     flag1++;
+            //}
+            //if (2 == our_cset->count(srclist.conn_neighbors.at(k).first) + our_cset->count(srclist.conn_neighbors.at(k).second))
+            if(flag1==2) 
+            edge.data().eqn10_const++;
+ 
+      //   if ( ((srclist.conn_neighbors.at(k).first==interlist.at(i))&&(srclist.conn_neighbors.at(k).second==interlist.at(j)))||((srclist.conn_neighbors.at(k).first==interlist.at(j)) && (srclist.conn_neighbors.at(k).second==interlist.at(i))) )
+        //    edge.data().eqn10_const++;
+        //  std::cout<<srclist.conn_neighbors.at(k).first<<" with " <<srclist.conn_neighbors.at(k).second<<std::endl;      
+      }
+//std::cout << "*** Triple FOR time (scatter): " << ti_temp1.current_time() << " sec" << std::endl;
+
+
+     
     }
   }
 };
@@ -996,8 +1013,8 @@ public:
     // vertex.data().num_wedges = vertex.data().num_wedges_c + (vertex.data().num_wedges - 3*h10);
     vertex.data().num_triangles = h10;
     vertex.data().num_wedges -= 3*h10;
-    vertex.data().num_disc = (vertex.data().num_disc + 6*h10)/2.;
-    vertex.data().num_empty = (vertex.data().num_empty - 6*h10)/6.;;
+    vertex.data().num_disc = (vertex.data().num_disc + 6*h10)/2;
+    vertex.data().num_empty = (vertex.data().num_empty - 6*h10)/6;
     //print here instead of in main??
     vertex.data().vid_set.clear(); //still necessary??    
   }
@@ -1205,7 +1222,7 @@ clopts.attach_option("prob_step", prob_step,
     
     //no global counts, just print/write each ego subgraph without rescaling
     if (PER_VERTEX_COUNT == false) {
-    //   vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
+       vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
     //   //size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
     //   //size_t denom = 1;
@@ -1221,6 +1238,15 @@ clopts.attach_option("prob_step", prob_step,
 
       total_time = ti.current_time();
       dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
+ // JUST printing global counts.     
+      std::cout.precision(20);
+      std::cout << "Global N_10:" <<global_counts.num_triangles/4 << std::endl; 
+      std::cout << "Global N_9:" <<global_counts.num_wedges/2<< std::endl;
+      std::cout << "Global N_8:" <<global_counts.num_disc<< std::endl;
+      std::cout << "Global N_6:" <<global_counts.num_empty<< std::endl;
+
+ 
+
       std::ofstream myfile;
       char fname[20];
       sprintf(fname,"counts_3_egos2.txt");
