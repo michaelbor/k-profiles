@@ -871,6 +871,10 @@ clopts.attach_option("prob_step", prob_step,
     max_prob = sample_prob_keep;
   }
 
+  graphlab::synchronous_engine<triangle_count> engine1(dc, graph, clopts);
+  graphlab::synchronous_engine<get_per_vertex_count> engine2(dc, graph, clopts);
+  graphlab::timer ti;
+
   double new_sample_prob = min_prob;
   while(new_sample_prob <= max_prob+0.00000000001){
     sample_prob_keep = new_sample_prob;
@@ -882,8 +886,9 @@ clopts.attach_option("prob_step", prob_step,
 
     dc.cout() << "Iteration " << sit+1 << " of " << sample_iter << ". current sample prob: " << sample_prob_keep <<std::endl;
 
-    graphlab::timer ti;
-    
+    //graphlab::timer ti;
+    ti.start();    
+
     // Initialize the vertex data
     graph.transform_vertices(init_vertex);
 
@@ -896,7 +901,7 @@ clopts.attach_option("prob_step", prob_step,
 
     // create engine to count the number of triangles
     dc.cout() << "Counting 3-profiles..." << std::endl;
-    graphlab::synchronous_engine<triangle_count> engine1(dc, graph, clopts);
+    //graphlab::synchronous_engine<triangle_count> engine1(dc, graph, clopts);
     // engine_type engine(dc, graph, clopts);
 
 
@@ -913,7 +918,7 @@ clopts.attach_option("prob_step", prob_step,
     //cannot put second engine before conditional?
     //graphlab::timer ti2;
     
-    graphlab::synchronous_engine<get_per_vertex_count> engine2(dc, graph, clopts);
+    //graphlab::synchronous_engine<get_per_vertex_count> engine2(dc, graph, clopts);
     engine2.signal_all();
     engine2.start();
     //dc.cout() << "Round 2 Counted in " << ti2.current_time() << " seconds" << std::endl;
@@ -922,11 +927,6 @@ clopts.attach_option("prob_step", prob_step,
     if (PER_VERTEX_COUNT == false) {
       vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
-      //size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
-      //size_t denom = 1;
-      //dc.cout() << "denominator: " << denom << std::endl;
-    //  dc.cout() << "Global count: " << global_counts.num_triangles/3 << "  " << global_counts.num_wedges/3 << "  " << global_counts.num_disc/3 << "  " << global_counts.num_empty/3 << "  " << std::endl;
-      //dc.cout() << "Global count (normalized): " << global_counts.num_triangles/(denom*3.) << "  " << global_counts.num_wedges/(denom*3.) << "  " << global_counts.num_disc/(denom*3.) << "  " << global_counts.num_empty/(denom*3.) << "  " << std::endl;
       dc.cout() << "Global count from estimators: " 
   	      << (global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
   	      << (global_counts.num_wedges/3)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(global_counts.num_triangles/3)/pow(sample_prob_keep, 3) << " "
@@ -937,7 +937,7 @@ clopts.attach_option("prob_step", prob_step,
       total_time = ti.current_time();
       dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
       std::ofstream myfile;
-      char fname[20];
+      char fname[30];
       sprintf(fname,"counts_3_profiles.txt");
       bool is_new_file = true;
       if (std::ifstream(fname)){
