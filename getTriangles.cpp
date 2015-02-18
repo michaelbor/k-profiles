@@ -107,7 +107,7 @@ double sample_prob_keep = 1;
 double min_prob = 1;
 double max_prob = 1;
 double prob_step = 0.5;
-size_t total_edges = 0;
+//size_t total_edges = 0;
 int sample_iter = 1;
 
 void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift) {
@@ -934,8 +934,8 @@ clopts.attach_option("prob_step", prob_step,
     //Sampling
     graph.transform_edges(sample_edge);
     //total_edges = graph.map_reduce_vertices<size_t>(get_vertex_degree)/2;
-    total_edges = graph.map_reduce_edges<size_t>(get_edge_sample_indicator);
-    dc.cout() << "Total edges counted (after sampling):" << total_edges << std::endl;
+    //total_edges = graph.map_reduce_edges<size_t>(get_edge_sample_indicator);
+    //dc.cout() << "Total edges counted (after sampling):" << total_edges << std::endl;
 
 
     // create engine to count the number of triangles
