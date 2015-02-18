@@ -9,6 +9,8 @@ add_graphlab_executable(get2hopV2 get2hopV2.cpp)
 #add_graphlab_executable(4profileK 4profileK.cpp)
 add_graphlab_executable(3profileEgo1 3profileEgo1.cpp)
 add_graphlab_executable(3profileEgo2 3profileEgo2.cpp)
+#add_graphlab_executable(3profileEgo1 3profileEgo1b.cpp)
+add_graphlab_executable(4profileV3 4profileV3_E.cpp)
 
 
 

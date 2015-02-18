@@ -1277,6 +1277,8 @@ clopts.attach_option("prob_step", prob_step,
     max_prob = sample_prob_keep;
   }
 
+  //read array of vertex ids, either all or subset to compare with ego2
+
   double new_sample_prob = min_prob;
   while(new_sample_prob <= max_prob+0.00000000001){
     sample_prob_keep = new_sample_prob;
