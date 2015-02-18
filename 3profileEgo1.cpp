@@ -746,6 +746,7 @@ public:
   gather_type gather(icontext_type& context,
                      const vertex_type& vertex,
                      edge_type& edge) const {
+    //std::cout << "Entering gather!!!: \n";
     set_union_sum_gather gather;
     // std::cout << "Iteration: " << context.iteration() << ", ego 3 profile G "<< vertex.id() 
     // << ", sego: " << edge.source().data().in_ego_indicator << ", tego: " << edge.target().data().in_ego_indicator
@@ -884,8 +885,8 @@ public:
      do_not_scatter = vertex.data().vid_set.size() == 0;
     
     size_t tosig = context.iteration()/5;  
-    if (tosig < context.num_vertices()) //is this check necessary?
-      context.signal_vid( (graphlab::vertex_id_type)tosig ); //signal to get ego_edges
+    if (tosig < (size_t)unique_vertex_ids.size()) //is this check necessary?
+      context.signal_vid( (graphlab::vertex_id_type)unique_vertex_ids[tosig] ); //signal to get ego_edges
 
    }
    
@@ -954,14 +955,14 @@ public:
     }
     
 
-    // size_t tosig = context.iteration()/5 + 1;  
+    size_t tosig = context.iteration()/5 + 1;  
     // if (tosig < context.num_vertices()) {
     //maybe increase iterator instead?
-    size_t tosig = unique_vertex_ids[context.iteration()/5 + 1];  
-    if ((context.iteration()/5 + 1) < unique_vertex_ids.size()) {
-      // std::cout << "Iteration: " << context.iteration()
-       // << " finished, now signaling vertex id: " << unique_vertex_ids[context.iteration()/5 + 1] << std::endl;
-      context.signal_vid( (graphlab::vertex_id_type)tosig );
+    // size_t tosig = unique_vertex_ids[context.iteration()/5 + 1];  
+    if (tosig < (size_t)unique_vertex_ids.size()) {
+      //std::cout << "Iteration: " << context.iteration()
+      //<< " finished, now signaling vertex id: " << unique_vertex_ids[tosig] << std::endl;
+      context.signal_vid( (graphlab::vertex_id_type)unique_vertex_ids[tosig] );
       //std::cout << "signaled OK " << std::endl;
     }
 
@@ -1294,11 +1295,20 @@ clopts.attach_option("prob_step", prob_step,
   // char lname[50];
   // sprintf(lname,vertex_id_filename);
   // IDstream.open(lname);
-  IDstream.open(vertex_id_filename); //is this ok?
-  for (size_t id; IDstream >> id;) { //getline instead?
+  IDstream.open(vertex_id_filename.c_str(),std::ifstream::in); //is this ok?
+  // for (size_t id; IDstream >> id;) { //c++11 only
+  //   unique_vertex_ids.push_back(id);
+  // }
+  //getline instead?
+  size_t id;
+  std::string linestring;
+  while (getline(IDstream,linestring)) {
+    std::istringstream li(linestring);  
+    li >> id;
     unique_vertex_ids.push_back(id);
   }
-  // dc.cout() << "unique id 1 is " << unique_vertex_ids[0] << ", unique id 5 is " << unique_vertex_ids[4] << std::endl;
+  IDstream.close();
+  //dc.cout() << "unique id 1 is " << unique_vertex_ids[0] << ", unique id 5 is " << unique_vertex_ids[4] << std::endl;
 
 
   size_t reference_bytes;
@@ -1352,10 +1362,15 @@ clopts.attach_option("prob_step", prob_step,
 
     //NEW CODE
     graphlab::synchronous_engine<iterated_ego_count> engine12it(dc, graph, clopts);
-    engine12it.signal(0);
+    //engine12it.signal(0);
+    engine12it.signal( (graphlab::vertex_id_type) unique_vertex_ids[0] ); 
+    //dc.cout() << "first signal OK" << std::endl;
+    //dc.cout() << "starting engine without signal" << std::endl;
     // GASphase = 2; //signal the neighbors of vertex with id 0
+    //engine0.signal_all();    
     engine12it.start();
     
+
     // dc.cout() << "NEW 3-profiles finished, looping over engine..." << std::endl;
 
     // graphlab::synchronous_engine<triangle_count> engine1(dc, graph, clopts);
