@@ -1206,12 +1206,10 @@ struct save_profile_count{
   //   double n_following = v.num_in_edges();
 
     //print?
-    #if 0
     std::cout << "Estimators for vertex " << v.id() << ": " << (v.data().num_triangles)/pow(sample_prob_keep, 3) << " "
     << (v.data().num_wedges)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(v.data().num_triangles)/pow(sample_prob_keep, 3) << " "
     << (v.data().num_disc)/sample_prob_keep - (1-sample_prob_keep)*(v.data().num_wedges)/pow(sample_prob_keep, 2) << " "
     << (v.data().num_empty)-(1-sample_prob_keep)*(v.data().num_disc)/sample_prob_keep << std::endl;
-    #endif
   //   return graphlab::tostr(v.id()) + "\t" +
   //          graphlab::tostr(nt) + "\t" +
   //          graphlab::tostr(n_followed) + "\t" + 
@@ -1370,7 +1368,7 @@ clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold"
     //dc.cout() << "Total Running time is: " << ti.current_time() << "seconds" << std::endl;
     
     //no global counts, just print/write each ego subgraph without rescaling
-    //if (PER_VERTEX_COUNT == false) {
+    if (PER_VERTEX_COUNT == false) {
        vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
     //   //size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
@@ -1397,7 +1395,7 @@ clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold"
  
 
       std::ofstream myfile;
-      char fname[30];
+      char fname[20];
       sprintf(fname,"counts_3_egos2.txt");
       bool is_new_file = true;
       if (std::ifstream(fname)){
@@ -1406,8 +1404,7 @@ clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold"
       myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
       if(is_new_file) myfile << "#graph\tsample_prob_keep\ttriangles\twedges\tdisc\tempty\truntime" << std::endl;
       myfile << prefix << "\t"
-           << /*sample_prob_keep*/sample_prob2 << "\t"
-	   << /*sample_prob_keep*/ne_thresh << "\t"
+           << sample_prob_keep << "\t"
            << std::setprecision (6)
            << total_time
            << std::endl;
@@ -1421,9 +1418,8 @@ clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold"
 
       myfile.close();
 
-   // }
-    //else {
-   if (PER_VERTEX_COUNT == true) {
+    }
+    else {
       graph.save(per_vertex,
               save_profile_count(),
               false, /* no compression */
