@@ -110,14 +110,12 @@ or implied, of Erik Gorset.
 */
 
 //probability of keeping an edge in the edges sampling process
-double sample_prob_keep = 1; // This is the global sampling probability of an edge
+double sample_prob_keep = 1;
 double min_prob = 1;
 double max_prob = 1;
 double prob_step = 0.5;
 size_t total_edges = 0;
 int sample_iter = 1;
-double sample_prob2=0.9;// This is the sample probabiltiy for edges in the Ego neighborhood
-size_t ne_thresh=200;
 
 void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift) {
     int x, y;
@@ -356,7 +354,6 @@ struct vertex_data_type {
   //vertex_data_type(): num_triangles(0){ }
   // A list of all its neighbors
   vid_vector vid_set;
-  vid_vector vid_set_sampled;//with sample_prob2
   // The number of triangles this vertex is involved it.
   // only used if "per vertex counting" is used
 #ifdef DOUBLE_COUNTERS
@@ -389,10 +386,10 @@ struct vertex_data_type {
   }
   
   void save(graphlab::oarchive &oarc) const {
-    oarc << conn_neighbors<< vid_set_sampled << vid_set << num_triangles << num_wedges << num_wedges_e << num_wedges_c << num_disc << num_empty;
+    oarc << conn_neighbors << vid_set << num_triangles << num_wedges << num_wedges_e << num_wedges_c << num_disc << num_empty;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> conn_neighbors >>vid_set_sampled>> vid_set >> num_triangles >> num_wedges >> num_wedges_e >> num_wedges_c >> num_disc >>num_empty;
+    iarc >> conn_neighbors >> vid_set >> num_triangles >> num_wedges >> num_wedges_e >> num_wedges_c >> num_disc >>num_empty;
   }
 };
 
@@ -413,24 +410,21 @@ struct edge_data_type {
   double n2e;
   double n2c;
   double n1;
-  double eqn10_const_src;
-  double eqn10_const_tar;
+  double eqn10_const;
 #else
   size_t n3;
   size_t n2;
   size_t n2e;
   size_t n2c;
   size_t n1;
-  size_t eqn10_const_src; 
-  size_t eqn10_const_tar;
+  size_t eqn10_const;
 #endif
   bool sample_indicator;
-  bool sample_indicator2;//this one is for Ego neighborhood
   void save(graphlab::oarchive &oarc) const {
-    oarc << n1 << n2 << n2e << n2c << n3 << sample_indicator<<sample_indicator2<<eqn10_const_src<<eqn10_const_tar;
+    oarc << n1 << n2 << n2e << n2c << n3 << sample_indicator;
   }
   void load(graphlab::iarchive &iarc) {
-    iarc >> n1 >> n2 >> n2e >> n2c >> n3 >> sample_indicator>>sample_indicator2>>eqn10_const_src>>eqn10_const_tar;
+    iarc >> n1 >> n2 >> n2e >> n2c >> n3 >> sample_indicator;
   }
 };
 
@@ -585,51 +579,34 @@ bool PER_VERTEX_COUNT = false;
  * an operator+= which simply performs a  +=
  */
 struct set_union_gather {
- graphlab::vertex_id_type v1;  // These two are used to signal edges after sampling for Ego neighborrhood.
- std::vector<graphlab::vertex_id_type> vec1;
-
   graphlab::vertex_id_type v;
   std::vector<graphlab::vertex_id_type> vid_vec;
 
- // set_union_gather():v(-1) {
- // }
-//NOT SURE IF THIS CONSTRUCTOR IS NEEDED OR NOT ELSEWHERE
+  set_union_gather():v(-1) {
+  }
 
- // size_t size() const {
- //   if (v == (graphlab::vertex_id_type)-1) return vid_vec.size();
- //   else return 1;
- // }
+  size_t size() const {
+    if (v == (graphlab::vertex_id_type)-1) return vid_vec.size();
+    else return 1;
+  }
   /*
    * Combining with another collection of vertices.
    * Union it into the current set.
    */
   set_union_gather& operator+=(const set_union_gather& other) {
-     size_t flag1=0,flag2=0; 
-   if ((vid_vec.size() == 0) &&(v==(graphlab::vertex_id_type)-1) ) {
-      (*this).v = other.v;
-      (*this).vid_vec=other.vid_vec;
-      flag1=1;
+    if (size() == 0) {
+      (*this) = other;
+      return (*this);
     }
-   else if ((other.vid_vec.size() == 0) &&(other.v==(graphlab::vertex_id_type)-1) )
-      flag1=1;
+    else if (other.size() == 0) {
+      return *this;
+    }
 
-     if ((vec1.size() == 0) &&(v1==(graphlab::vertex_id_type)-1) ) {
-      (*this).v1 = other.v1;
-      (*this).vec1=other.vec1;
-      flag2=1;
+    if (vid_vec.size() == 0) {
+      vid_vec.push_back(v);
+      v = (graphlab::vertex_id_type)(-1);
     }
-   else if ((other.vec1.size() == 0) &&(other.v1==(graphlab::vertex_id_type)-1) )
-      flag2=1;
- 
- 
-   if(flag1==0) { 
-     
-    if(vid_vec.size()==0) {
-     vid_vec.push_back(v);
-     v= (graphlab::vertex_id_type)(-1);
-    }
- 
-     if (other.vid_vec.size() > 0) {
+    if (other.vid_vec.size() > 0) {
       size_t ct = vid_vec.size();
       vid_vec.resize(vid_vec.size() + other.vid_vec.size());
       for (size_t i = 0; i < other.vid_vec.size(); ++i) {
@@ -639,29 +616,6 @@ struct set_union_gather {
     else if (other.v != (graphlab::vertex_id_type)-1) {
       vid_vec.push_back(other.v);
     }
-  }
-//REPLICATED THE ABOVE FOR vec1 and v1 variables that were added above.
-
-  if(flag2==0) {  
-   
-   if(vec1.size()==0) {
-     vec1.push_back(v1);
-     v1= (graphlab::vertex_id_type)(-1);
-    }
- 
-    if (other.vec1.size() > 0) {
-      size_t ct = vec1.size();
-      vec1.resize(vec1.size() + other.vec1.size());
-      for (size_t i = 0; i < other.vec1.size(); ++i) {
-        vec1[ct + i] = other.vec1[i];
-      }
-    }
-    else if (other.v1 != (graphlab::vertex_id_type)-1) {
-      vec1.push_back(other.v1);
-    }
-
-  } 
-
     return *this;
   }
   
@@ -670,11 +624,6 @@ struct set_union_gather {
     oarc << bool(vid_vec.size() == 0);
     if (vid_vec.size() == 0) oarc << v;
     else oarc << vid_vec;
-   
-    oarc << bool(vec1.size() == 0);
-    if (vec1.size() == 0) oarc << v1;
-    else oarc << vec1;
- 
   }
 
   // deserialize
@@ -685,14 +634,6 @@ struct set_union_gather {
     iarc >> novvec;
     if (novvec) iarc >> v;
     else iarc >> vid_vec;
-
-    bool novvec1;
-    v1 = (graphlab::vertex_id_type)(-1);
-    vec1.clear();
-    iarc >> novvec1;
-    if (novvec1) iarc >> v1;
-    else iarc >> vec1;
-
   }
 };
 
@@ -720,13 +661,6 @@ void sample_edge(graph_type::edge_type& edge) {
     edge.data().sample_indicator = 1;
   else
     edge.data().sample_indicator = 0;
-// The ego neighborhood sampling
-   if(graphlab::random::rand01() < sample_prob2)   
-    edge.data().sample_indicator2 = 1;
-  else
-    edge.data().sample_indicator2 = 0;
-
-  
 }
 
 
@@ -760,8 +694,7 @@ public:
                      edge_type& edge) const {
     set_union_gather gather;
     if(edge.data().sample_indicator == 0){
-      gather.v = -1;
-      gather.vid_vec.clear(); 
+      gather.v = -1; 
     }
     else{
       graphlab::vertex_id_type otherid = edge.target().id() == vertex.id() ?
@@ -776,20 +709,8 @@ public:
     //if (PER_VERTEX_COUNT || (other_nbrs > my_nbrs) || (other_nbrs == my_nbrs && otherid > vertex.id())) {
     //if (PER_VERTEX_COUNT || otherid > vertex.id()) {
       gather.v = otherid; //will this work? what is v??
-      gather.vid_vec.clear();
     //} 
-   }
-
-    if(edge.data().sample_indicator2 == 0){
-      gather.v1 = -1; 
-      gather.vec1.clear();
-    }
-    else{
-      graphlab::vertex_id_type otherid = edge.target().id() == vertex.id() ?
-                                       edge.source().id() : edge.target().id();
-      gather.v1=otherid;
-      gather.vec1.clear();
-   }
+   } 
    return gather;
   }
 
@@ -811,19 +732,6 @@ public:
      vertex.data().vid_set.assign(neighborhood.vid_vec);
    }
    do_not_scatter = vertex.data().vid_set.size() == 0;
-
-   if (neighborhood.vec1.size() == 0) {
-     // neighborhood set may be empty or has only 1 element
-     vertex.data().vid_set_sampled.clear();
-     if (neighborhood.v1 != (graphlab::vertex_id_type(-1))) {
-       vertex.data().vid_set_sampled.vid_vec.push_back(neighborhood.v1);
-     }
-   }
-   else {
-     vertex.data().vid_set_sampled.assign(neighborhood.vec1);
-   }
-   
-
   } // end of apply
 
   /*
@@ -913,28 +821,11 @@ public:
       gather.n3_double = (edge.data().n3)*(edge.data().n3-1)/2;
       gather.n2c_double = (gather.n2c)*(gather.n2c-1)/2;
       gather.n2c_n3 = gather.n3*gather.n2c;
-       
-     std::vector<graphlab::vertex_id_type> srcne,trgne; 
-     srcne.clear();
-     trgne.clear();
-     if(vertex.id()==edge.source().id()) {
-      srcne = edge.source().data().vid_set.vid_vec;
-      if(srcne.size()>ne_thresh)
-      trgne = edge.target().data().vid_set_sampled.vid_vec;
-      else
-      trgne =edge.target().data().vid_set.vid_vec;
-     } 
-     else {
-        if(trgne.size()>ne_thresh)
-         srcne = edge.source().data().vid_set_sampled.vid_vec;
-        else
-         srcne =edge.source().data().vid_set.vid_vec;
-
-       trgne = edge.target().data().vid_set.vid_vec;  
-     }  
+    
+      std::vector<graphlab::vertex_id_type> srcne = edge.source().data().vid_set.vid_vec;
+      std::vector<graphlab::vertex_id_type> trgne = edge.target().data().vid_set.vid_vec;
       std::vector<graphlab::vertex_id_type> interlist;
-     // SLIGHT CHANGE USING SAMPLED LIST DEPENDING ON THE DIRECTION OF GATHER 
-       interlist.clear();    
+        interlist.clear();    
       sort(srcne.begin(),srcne.end());
       sort(trgne.begin(),trgne.end());
       gather.common.clear();      
@@ -1028,76 +919,48 @@ public:
     //    vertex_type othervtx = edge.target();
     if (edge.data().sample_indicator == 1){
       const vertex_data_type& srclist = edge.source().data();
-      const vertex_data_type& targetlist = edge.target().data();
-      std::vector<graphlab::vertex_id_type> srcne = edge.source().data().vid_set.vid_vec;
-      std::vector<graphlab::vertex_id_type>  trgne = edge.target().data().vid_set.vid_vec;
-       
-      std::vector<graphlab::vertex_id_type> srcne_sampled=edge.source().data().vid_set_sampled.vid_vec;
-      std::vector<graphlab::vertex_id_type> trgne_sampled=edge.target().data().vid_set_sampled.vid_vec; 
+      //const vertex_data_type& targetlist = edge.target().data();
+       std::vector<graphlab::vertex_id_type> srcne = edge.source().data().vid_set.vid_vec;
+       std::vector<graphlab::vertex_id_type>  trgne = edge.target().data().vid_set.vid_vec;
       std::vector<graphlab::vertex_id_type> interlist;
-      std::vector<graphlab::vertex_id_type> interlist1; 
           interlist.clear();    
-          interlist1.clear();
       sort(srcne.begin(),srcne.end());
       sort(trgne.begin(),trgne.end());
-      sort(srcne_sampled.begin(),srcne_sampled.end());
-      sort(trgne_sampled.begin(),trgne_sampled.end());
-      edge.data().eqn10_const_src=0;
-      edge.data().eqn10_const_tar=0;      
-      // interlist contains the intersection.
-      if(srcne.size()>ne_thresh)
-      std::set_intersection(srcne.begin(),srcne.end(),trgne_sampled.begin(),trgne_sampled.end(),std::back_inserter(interlist));
-      else
-       std::set_intersection(srcne.begin(),srcne.end(),trgne.begin(),trgne.end(),std::back_inserter(interlist));
-  
-      if(trgne.size()>ne_thresh)
-        std::set_intersection(srcne_sampled.begin(),srcne_sampled.end(),trgne.begin(),trgne.end(),std::back_inserter(interlist1));
-      else
-        std::set_intersection(srcne.begin(),srcne.end(),trgne.begin(),trgne.end(),std::back_inserter(interlist1));
-  
-
+      edge.data().eqn10_const=0;     
+      // interlist contains the intersection.  
+      std::set_intersection(srcne.begin(),srcne.end(),trgne.begin(),trgne.end(),std::back_inserter(interlist));
       //Check for each pair of members if they have a common edge, if they do count.
-      graphlab::hopscotch_set<graphlab::vertex_id_type> *our_cset; 
-      our_cset = new graphlab::hopscotch_set<graphlab::vertex_id_type>(64);
-      foreach (graphlab::vertex_id_type v, interlist) {
-        our_cset->insert(v);
-      }
-      graphlab::hopscotch_set<graphlab::vertex_id_type> *our_cset1; 
-      our_cset1 = new graphlab::hopscotch_set<graphlab::vertex_id_type>(64);
-      foreach (graphlab::vertex_id_type v, interlist1) {
-        our_cset1->insert(v);
-      }
+        graphlab::hopscotch_set<graphlab::vertex_id_type> *our_cset; 
+        our_cset = new graphlab::hopscotch_set<graphlab::vertex_id_type>(64);
+        foreach (graphlab::vertex_id_type v, interlist) {
+          our_cset->insert(v);
+        }
 
 //std::cout << "*** Hopscotch init time (scatter): " << ti_temp1.current_time() << " sec" << std::endl;
 
-     for(size_t k=0;k<srclist.conn_neighbors.size();k++) {
-        //graphlab::vertex_id_type num1=srclist.conn_neighbors.at(k).first;
-        //graphlab::vertex_id_type num2=srclist.conn_neighbors.at(k).second;
-        size_t flag1=0;
-        flag1 = our_cset->count(srclist.conn_neighbors.at(k).first) + our_cset->count(srclist.conn_neighbors.at(k).second);
-        //flag1 =(size_t)(our_cset->find(num1)!=our_cset->end()) + (size_t)(our_cset->find(num2)!=our_cset->end());
-        // for(size_t i=0;i<interlist.size();i++){
-        //    if((interlist.at(i)==num1)||(interlist.at(i)==num2))
-        //     flag1++;
-        //}
-        //if (2 == our_cset->count(srclist.conn_neighbors.at(k).first) + our_cset->count(srclist.conn_neighbors.at(k).second))
-        if(flag1==2) 
-        edge.data().eqn10_const_src++;
-      
-
+         for(size_t k=0;k<srclist.conn_neighbors.size();k++) {
+            //graphlab::vertex_id_type num1=srclist.conn_neighbors.at(k).first;
+            //graphlab::vertex_id_type num2=srclist.conn_neighbors.at(k).second;
+            size_t flag1=0;
+      flag1 = our_cset->count(srclist.conn_neighbors.at(k).first) + our_cset->count(srclist.conn_neighbors.at(k).second);
+            //flag1 =(size_t)(our_cset->find(num1)!=our_cset->end()) + (size_t)(our_cset->find(num2)!=our_cset->end());
+            // for(size_t i=0;i<interlist.size();i++){
+            //    if((interlist.at(i)==num1)||(interlist.at(i)==num2))
+            //     flag1++;
+            //}
+            //if (2 == our_cset->count(srclist.conn_neighbors.at(k).first) + our_cset->count(srclist.conn_neighbors.at(k).second))
+            if(flag1==2) 
+            edge.data().eqn10_const++;
+ 
       //   if ( ((srclist.conn_neighbors.at(k).first==interlist.at(i))&&(srclist.conn_neighbors.at(k).second==interlist.at(j)))||((srclist.conn_neighbors.at(k).first==interlist.at(j)) && (srclist.conn_neighbors.at(k).second==interlist.at(i))) )
         //    edge.data().eqn10_const++;
-        //  std::cout<<srclist.conn_neighbiors.at(k).first<<" with " <<srclist.conn_neighbors.at(k).second<<std::endl;      
-     }
+        //  std::cout<<srclist.conn_neighbors.at(k).first<<" with " <<srclist.conn_neighbors.at(k).second<<std::endl;      
+      }
 //std::cout << "*** Triple FOR time (scatter): " << ti_temp1.current_time() << " sec" << std::endl;
-     for (size_t k=0;k<targetlist.conn_neighbors.size();k++) {
-        size_t flag1=0;
-        flag1 = our_cset1->count(targetlist.conn_neighbors.at(k).first) + our_cset1->count(targetlist.conn_neighbors.at(k).second);
-        if(flag1==2) 
-        edge.data().eqn10_const_tar++;
 
-     }
-   }
+
+     
+    }
   }
 };
 
@@ -1121,10 +984,7 @@ public:
   
   clique_gather gather;
      if (edge.data().sample_indicator == 1){
-       if(vertex.id()==edge.source().id())
-        gather.h10e = edge.data().eqn10_const_src;
-      else
-       gather.h10e=edge.data().eqn10_const_tar; 
+        gather.h10e = edge.data().eqn10_const;
       }
       else {
         gather.h10e = 0;
@@ -1136,7 +996,7 @@ public:
   void apply(icontext_type& context, vertex_type& vertex,
              const gather_type& ecounts) {
   
-    size_t h10 = ecounts.h10e/3; //eqch clique counted by all 3 incoming edges
+    size_t h10 = ecounts.h10e/3.; //eqch clique counted by all 3 incoming edges
     
     //matrix inverse here??
     /*0.333333333333333   0.333333333333333  -0.166666666666667  -1.000000000000000
@@ -1151,12 +1011,7 @@ public:
 
     // vertex.data().num_triangles += h10;
     // vertex.data().num_wedges = vertex.data().num_wedges_c + (vertex.data().num_wedges - 3*h10);
-
-    if(vertex.data().vid_set.size()>ne_thresh)
-    vertex.data().num_triangles = h10/pow(sample_prob2,3);
-    else
-    vertex.data().num_triangles = h10; 
-    //scaling to account for ego sampling
+    vertex.data().num_triangles = h10;
     vertex.data().num_wedges -= 3*h10;
     vertex.data().num_disc = (vertex.data().num_disc + 6*h10)/2;
     vertex.data().num_empty = (vertex.data().num_empty - 6*h10)/6;
@@ -1269,8 +1124,6 @@ clopts.attach_option("max_prob", max_prob,
                        "max prob");
 clopts.attach_option("prob_step", prob_step,
                        "prob step");
-clopts.attach_option("sample_prob2",sample_prob2,"Ego sampling prob");
-clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold");
 
   if(!clopts.parse(argc, argv)) return EXIT_FAILURE;
   if (prefix == "") {
@@ -1370,7 +1223,7 @@ clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold"
     //dc.cout() << "Total Running time is: " << ti.current_time() << "seconds" << std::endl;
     
     //no global counts, just print/write each ego subgraph without rescaling
-    //if (PER_VERTEX_COUNT == false) {
+   // if (PER_VERTEX_COUNT == false) {
        vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
     //   //size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
@@ -1406,8 +1259,7 @@ clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold"
       myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
       if(is_new_file) myfile << "#graph\tsample_prob_keep\ttriangles\twedges\tdisc\tempty\truntime" << std::endl;
       myfile << prefix << "\t"
-           << /*sample_prob_keep*/sample_prob2 << "\t"
-	   << /*sample_prob_keep*/ne_thresh << "\t"
+           << sample_prob_keep << "\t"
            << std::setprecision (6)
            << total_time
            << std::endl;
@@ -1423,16 +1275,18 @@ clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold"
 
    // }
     //else {
-   if (PER_VERTEX_COUNT == true) {
-      graph.save(per_vertex,
+     
+     if (PER_VERTEX_COUNT == true){
+	 graph.save(per_vertex,
               save_profile_count(),
               false, /* no compression */
               true, /* save vertex */
               false, /* do not save edge */
               1); /* one file per machine */
               // clopts.get_ncpus());
+     }
 
-    }
+   // }
     
 
   }//for iterations

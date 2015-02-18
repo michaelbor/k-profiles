@@ -1050,54 +1050,54 @@ public:
       else
        std::set_intersection(srcne.begin(),srcne.end(),trgne.begin(),trgne.end(),std::back_inserter(interlist));
   
-      if(trgne.size()>ne_thresh)
-        std::set_intersection(srcne_sampled.begin(),srcne_sampled.end(),trgne.begin(),trgne.end(),std::back_inserter(interlist1));
-      else
-        std::set_intersection(srcne.begin(),srcne.end(),trgne.begin(),trgne.end(),std::back_inserter(interlist1));
+    if(trgne.size()>ne_thresh)
+      std::set_intersection(srcne_sampled.begin(),srcne_sampled.end(),trgne.begin(),trgne.end(),std::back_inserter(interlist1));
+   else
+      std::set_intersection(srcne.begin(),srcne.end(),trgne.begin(),trgne.end(),std::back_inserter(interlist1));
   
 
-      //Check for each pair of members if they have a common edge, if they do count.
-      graphlab::hopscotch_set<graphlab::vertex_id_type> *our_cset; 
-      our_cset = new graphlab::hopscotch_set<graphlab::vertex_id_type>(64);
-      foreach (graphlab::vertex_id_type v, interlist) {
-        our_cset->insert(v);
-      }
-      graphlab::hopscotch_set<graphlab::vertex_id_type> *our_cset1; 
-      our_cset1 = new graphlab::hopscotch_set<graphlab::vertex_id_type>(64);
-      foreach (graphlab::vertex_id_type v, interlist1) {
-        our_cset1->insert(v);
-      }
+       //Check for each pair of members if they have a common edge, if they do count.
+        graphlab::hopscotch_set<graphlab::vertex_id_type> *our_cset; 
+        our_cset = new graphlab::hopscotch_set<graphlab::vertex_id_type>(64);
+        foreach (graphlab::vertex_id_type v, interlist) {
+          our_cset->insert(v);
+        }
+        graphlab::hopscotch_set<graphlab::vertex_id_type> *our_cset1; 
+        our_cset1 = new graphlab::hopscotch_set<graphlab::vertex_id_type>(64);
+        foreach (graphlab::vertex_id_type v, interlist1) {
+          our_cset1->insert(v);
+        }
 
 //std::cout << "*** Hopscotch init time (scatter): " << ti_temp1.current_time() << " sec" << std::endl;
 
-     for(size_t k=0;k<srclist.conn_neighbors.size();k++) {
-        //graphlab::vertex_id_type num1=srclist.conn_neighbors.at(k).first;
-        //graphlab::vertex_id_type num2=srclist.conn_neighbors.at(k).second;
-        size_t flag1=0;
-        flag1 = our_cset->count(srclist.conn_neighbors.at(k).first) + our_cset->count(srclist.conn_neighbors.at(k).second);
-        //flag1 =(size_t)(our_cset->find(num1)!=our_cset->end()) + (size_t)(our_cset->find(num2)!=our_cset->end());
-        // for(size_t i=0;i<interlist.size();i++){
-        //    if((interlist.at(i)==num1)||(interlist.at(i)==num2))
-        //     flag1++;
-        //}
-        //if (2 == our_cset->count(srclist.conn_neighbors.at(k).first) + our_cset->count(srclist.conn_neighbors.at(k).second))
-        if(flag1==2) 
-        edge.data().eqn10_const_src++;
-      
+         for(size_t k=0;k<srclist.conn_neighbors.size();k++) {
+            //graphlab::vertex_id_type num1=srclist.conn_neighbors.at(k).first;
+            //graphlab::vertex_id_type num2=srclist.conn_neighbors.at(k).second;
+            size_t flag1=0;
+            flag1 = our_cset->count(srclist.conn_neighbors.at(k).first) + our_cset->count(srclist.conn_neighbors.at(k).second);
+            //flag1 =(size_t)(our_cset->find(num1)!=our_cset->end()) + (size_t)(our_cset->find(num2)!=our_cset->end());
+            // for(size_t i=0;i<interlist.size();i++){
+            //    if((interlist.at(i)==num1)||(interlist.at(i)==num2))
+            //     flag1++;
+            //}
+            //if (2 == our_cset->count(srclist.conn_neighbors.at(k).first) + our_cset->count(srclist.conn_neighbors.at(k).second))
+            if(flag1==2) 
+            edge.data().eqn10_const_src++;
+          
 
       //   if ( ((srclist.conn_neighbors.at(k).first==interlist.at(i))&&(srclist.conn_neighbors.at(k).second==interlist.at(j)))||((srclist.conn_neighbors.at(k).first==interlist.at(j)) && (srclist.conn_neighbors.at(k).second==interlist.at(i))) )
         //    edge.data().eqn10_const++;
         //  std::cout<<srclist.conn_neighbiors.at(k).first<<" with " <<srclist.conn_neighbors.at(k).second<<std::endl;      
-     }
+      }
 //std::cout << "*** Triple FOR time (scatter): " << ti_temp1.current_time() << " sec" << std::endl;
-     for (size_t k=0;k<targetlist.conn_neighbors.size();k++) {
-        size_t flag1=0;
-        flag1 = our_cset1->count(targetlist.conn_neighbors.at(k).first) + our_cset1->count(targetlist.conn_neighbors.at(k).second);
-        if(flag1==2) 
-        edge.data().eqn10_const_tar++;
+         for (size_t k=0;k<targetlist.conn_neighbors.size();k++) {
+            size_t flag1=0;
+            flag1 = our_cset1->count(targetlist.conn_neighbors.at(k).first) + our_cset1->count(targetlist.conn_neighbors.at(k).second);
+            if(flag1==2) 
+            edge.data().eqn10_const_tar++;
 
-     }
-   }
+        }
+    }
   }
 };
 
@@ -1136,7 +1136,7 @@ public:
   void apply(icontext_type& context, vertex_type& vertex,
              const gather_type& ecounts) {
   
-    size_t h10 = ecounts.h10e/3; //eqch clique counted by all 3 incoming edges
+    size_t h10 = ecounts.h10e/3.; //eqch clique counted by all 3 incoming edges
     
     //matrix inverse here??
     /*0.333333333333333   0.333333333333333  -0.166666666666667  -1.000000000000000
@@ -1206,12 +1206,10 @@ struct save_profile_count{
   //   double n_following = v.num_in_edges();
 
     //print?
-    #if 0
     std::cout << "Estimators for vertex " << v.id() << ": " << (v.data().num_triangles)/pow(sample_prob_keep, 3) << " "
     << (v.data().num_wedges)/pow(sample_prob_keep, 2) - (1-sample_prob_keep)*(v.data().num_triangles)/pow(sample_prob_keep, 3) << " "
     << (v.data().num_disc)/sample_prob_keep - (1-sample_prob_keep)*(v.data().num_wedges)/pow(sample_prob_keep, 2) << " "
     << (v.data().num_empty)-(1-sample_prob_keep)*(v.data().num_disc)/sample_prob_keep << std::endl;
-    #endif
   //   return graphlab::tostr(v.id()) + "\t" +
   //          graphlab::tostr(nt) + "\t" +
   //          graphlab::tostr(n_followed) + "\t" + 
@@ -1370,7 +1368,7 @@ clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold"
     //dc.cout() << "Total Running time is: " << ti.current_time() << "seconds" << std::endl;
     
     //no global counts, just print/write each ego subgraph without rescaling
-    //if (PER_VERTEX_COUNT == false) {
+    if (PER_VERTEX_COUNT == false) {
        vertex_data_type global_counts = graph.map_reduce_vertices<vertex_data_type>(get_vertex_data);
 
     //   //size_t denom = (graph.num_vertices()*(graph.num_vertices()-1)*(graph.num_vertices()-2))/6.; //normalize by |V| choose 3, THIS IS NOT ACCURATE!
@@ -1397,7 +1395,7 @@ clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold"
  
 
       std::ofstream myfile;
-      char fname[30];
+      char fname[20];
       sprintf(fname,"counts_3_egos2.txt");
       bool is_new_file = true;
       if (std::ifstream(fname)){
@@ -1406,8 +1404,7 @@ clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold"
       myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
       if(is_new_file) myfile << "#graph\tsample_prob_keep\ttriangles\twedges\tdisc\tempty\truntime" << std::endl;
       myfile << prefix << "\t"
-           << /*sample_prob_keep*/sample_prob2 << "\t"
-	   << /*sample_prob_keep*/ne_thresh << "\t"
+           << sample_prob_keep << "\t"
            << std::setprecision (6)
            << total_time
            << std::endl;
@@ -1421,9 +1418,8 @@ clopts.attach_option("ne_thresh",ne_thresh,"Neighborhood ego sampling threshold"
 
       myfile.close();
 
-   // }
-    //else {
-   if (PER_VERTEX_COUNT == true) {
+    }
+    else {
       graph.save(per_vertex,
               save_profile_count(),
               false, /* no compression */

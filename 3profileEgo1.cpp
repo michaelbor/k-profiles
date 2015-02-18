@@ -117,6 +117,8 @@ double prob_step = 0.5;
 size_t total_edges = 0;
 int sample_iter = 1;
 graphlab::vertex_id_type ego_center = 0;
+
+//std::vector<graphlab::vertex_id_type> global_vid_vec;
 // size_t ego_vertices = 0;
 // size_t ego_edges = 0;
 // short int GASphase = 0;
@@ -949,9 +951,10 @@ public:
     
     size_t tosig = context.iteration()/5 + 1;  
     if (tosig < context.num_vertices()) {
-      // std::cout << "Iteration: " << context.iteration()
-      // << " finished, now signaling vertex id: " << context.iteration()/5 + 1 << std::endl;
+      //std::cout << "Iteration: " << context.iteration()
+       //<< " finished, now signaling vertex id: " << context.iteration()/5 + 1 << std::endl;
       context.signal_vid( (graphlab::vertex_id_type)tosig );
+      //std::cout << "signaled OK " << std::endl;
     }
 
    }
@@ -1267,6 +1270,11 @@ clopts.attach_option("prob_step", prob_step,
 
   dc.cout() << "sample_prob_keep = " << sample_prob_keep << std::endl;
   dc.cout() << "sample_iter = " << sample_iter << std::endl;
+
+
+
+// read global IDs in to the vector "global_vid_vec"
+
 
 
   size_t reference_bytes;
