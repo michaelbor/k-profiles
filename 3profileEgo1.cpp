@@ -117,6 +117,7 @@ double prob_step = 0.5;
 size_t total_edges = 0;
 int sample_iter = 1;
 graphlab::vertex_id_type ego_center = 0;
+std::vector<size_t> unique_vertex_ids; //vector or array??
 
 //std::vector<graphlab::vertex_id_type> global_vid_vec;
 // size_t ego_vertices = 0;
@@ -923,7 +924,10 @@ public:
     //print the answers, and save to a log file at the command line?
     //signal the ego center vertex for reduction
     // std::cout << "Reducing on vertex: " << context.iteration()/5 << std::endl;
-    context.signal_vid( (graphlab::vertex_id_type) (context.iteration()/5) );
+    // context.signal_vid( (graphlab::vertex_id_type) (context.iteration()/5) );
+    //maybe use iterator instead?
+    // std::cout << "Reducing on vertex: " << unique_vertex_ids[context.iteration()/5] << std::endl;
+    context.signal_vid( (graphlab::vertex_id_type) unique_vertex_ids[context.iteration()/5] );
 
 
 
@@ -949,10 +953,14 @@ public:
       << round((neighborhood_ecounts.n1/3) - (1-sample_prob_keep)*(neighborhood_ecounts.n2e/3)/sample_prob_keep) << std::endl;
     }
     
-    size_t tosig = context.iteration()/5 + 1;  
-    if (tosig < context.num_vertices()) {
-      //std::cout << "Iteration: " << context.iteration()
-       //<< " finished, now signaling vertex id: " << context.iteration()/5 + 1 << std::endl;
+
+    // size_t tosig = context.iteration()/5 + 1;  
+    // if (tosig < context.num_vertices()) {
+    //maybe increase iterator instead?
+    size_t tosig = unique_vertex_ids[context.iteration()/5 + 1];  
+    if ((context.iteration()/5 + 1) < unique_vertex_ids.size()) {
+      // std::cout << "Iteration: " << context.iteration()
+       // << " finished, now signaling vertex id: " << unique_vertex_ids[context.iteration()/5 + 1] << std::endl;
       context.signal_vid( (graphlab::vertex_id_type)tosig );
       //std::cout << "signaled OK " << std::endl;
     }
@@ -1214,11 +1222,14 @@ int main(int argc, char** argv) {
     "will over count.");
   std::string prefix, format;
   std::string per_vertex;
+  std::string vertex_id_filename;
   clopts.attach_option("graph", prefix,
                        "Graph input. reads all graphs matching prefix*");
   clopts.attach_option("format", format,
                        "The graph format");
- clopts.attach_option("ht", HASH_THRESHOLD,
+  clopts.attach_option("id_list", vertex_id_filename,
+                       "Vertex ID list. calculate egos on all vertices in this file");
+  clopts.attach_option("ht", HASH_THRESHOLD,
                        "Above this size, hash sets are used");
   clopts.attach_option("per_vertex", per_vertex,
                        "If not empty, will count the number of "
@@ -1248,6 +1259,11 @@ clopts.attach_option("prob_step", prob_step,
     clopts.print_description();
     return EXIT_FAILURE;
   }
+  else if (vertex_id_filename == "") {
+    std::cout << "--id_list is not optional\n";
+    clopts.print_description();
+    return EXIT_FAILURE;
+  }
 
   if ((per_vertex != "") & (sample_iter > 1)) {
     std::cout << "--multiple iterations for no writing only\n";
@@ -1273,8 +1289,16 @@ clopts.attach_option("prob_step", prob_step,
 
 
 
-// read global IDs in to the vector "global_vid_vec"
-
+  // read global IDs in to the vector "global_vid_vec"
+  std::ifstream IDstream;
+  // char lname[50];
+  // sprintf(lname,vertex_id_filename);
+  // IDstream.open(lname);
+  IDstream.open(vertex_id_filename); //is this ok?
+  for (size_t id; IDstream >> id;) { //getline instead?
+    unique_vertex_ids.push_back(id);
+  }
+  // dc.cout() << "unique id 1 is " << unique_vertex_ids[0] << ", unique id 5 is " << unique_vertex_ids[4] << std::endl;
 
 
   size_t reference_bytes;
@@ -1284,6 +1308,8 @@ clopts.attach_option("prob_step", prob_step,
     min_prob = sample_prob_keep;
     max_prob = sample_prob_keep;
   }
+
+  //read array of vertex ids, either all or subset to compare with ego2
 
   double new_sample_prob = min_prob;
   while(new_sample_prob <= max_prob+0.00000000001){
@@ -1351,6 +1377,7 @@ clopts.attach_option("prob_step", prob_step,
     
     // // foreach(graphlab::vertex_id_type vid, MAX_VID_VEC) {
     // for (size_t e=0; e<graph.num_vertices(); e++) { //WRONG! assumes vertices are labelled 0 through number - 1
+    // // use the size of unique_vertex_ids instead
     //   graph.transform_vertices(init_vertex); //clear anything that was signalled last time but not this time?
     //   ego_center = e;
     //   //get ego subgraph

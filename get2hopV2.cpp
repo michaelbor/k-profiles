@@ -825,8 +825,11 @@ public:
    else {
     vertex.data().two_hop_set.cset->erase(vertex.id());
     // vertex.data().two_hop_set.cset->insert(vertex.id()); //this does not seem to create duplicates...
+    // std::cout << "first count is " << vertex.data().two_hop_set.cset->count(vertex.id()) << "\n";
     // vertex.data().two_hop_set.cset->insert(vertex.id()); //this does not seem to create duplicates...
+    // std::cout << "second count is " << vertex.data().two_hop_set.cset->count(vertex.id()) << "\n";
     // vertex.data().two_hop_set.cset->insert(vertex.id()); //this does not seem to create duplicates...
+    // std::cout << "third count is " << vertex.data().two_hop_set.cset->count(vertex.id()) << "\n";
    }
    
    // vertex.data().vid_set.resize(std::distance(vertex.data().vid_set.begin(),newend));
