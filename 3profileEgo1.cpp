@@ -1496,9 +1496,10 @@ clopts.attach_option("prob_step", prob_step,
       is_new_file = false;
     }
     myfile.open (fname,std::fstream::in | std::fstream::out | std::fstream::app);
-    if(is_new_file) myfile << "#graph\tsample_prob_keep\truntime" << std::endl;
+    if(is_new_file) myfile << "#graph\tidfile\truntime" << std::endl;
     myfile << prefix << "\t"
-     << sample_prob_keep << "\t"
+    << vertex_id_filename << "\t"
+    //<< sample_prob_keep << "\t"
            << std::setprecision (6)
            << total_time
            << std::endl;
