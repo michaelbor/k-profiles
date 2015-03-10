@@ -168,7 +168,7 @@ void radix_sort(graphlab::vertex_id_type *array, int offset, int end, int shift)
     }
 }
 
-size_t HASH_THRESHOLD = 1000000000;//64;
+size_t HASH_THRESHOLD = 1000000000;//64; //BACH TO 64 FOR FUTURE EXPERIMENTS?
 
 // We on each vertex, either a vector of sorted VIDs
 // or a hash set (cuckoo hash) of VIDs.
