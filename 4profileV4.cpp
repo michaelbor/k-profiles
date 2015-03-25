@@ -22,6 +22,7 @@
 
 
 #include <boost/unordered_set.hpp>
+#include <boost/unordered_map.hpp> //either c++11 or boost library...
 //#include <boost/multiprecision/cpp_int.hpp>
 #include <graphlab.hpp>
 #include <graphlab/ui/metrics_server.hpp>
@@ -596,6 +597,7 @@ struct edge_sum_gather {
 #endif
   // std::list<idcount> b; // 4-PROFILE CHANGE. This is a list of idcounts where each idcount stores the (id,count) for  accumulation during gather.
   std::vector<idcount> b; // which is better?
+  // boost::unordered_map<graphlab::vertex_id_type,size_t> b; //ETHAN UNORDERED MAP
 
   edge_sum_gather& operator+=(const edge_sum_gather& other) {
     n3 += other.n3;
@@ -680,6 +682,24 @@ struct edge_sum_gather {
     b=a;
 
 
+    // //ETHAN UNORDERED MAP
+    // //boost:: or std:: with c++11
+    // // boost::unordered_map<vertex_id_type, size_t=0> e = other.b
+    // boost::unordered_map<graphlab::vertex_id_type, size_t> e = other.b; //necessary to reassign here?
+    // boost::unordered_map<graphlab::vertex_id_type, size_t>::iterator it4;
+    
+    // //reserve b to size of e if e is larger than b???
+    // for (it4 = e.begin(); it4 != e.end(); it4++) {
+    // // while (it4 != e.end()) {
+    //   //[] and insert can both invalidate iterators??!?
+    //   // it4->first;
+    //   // it4->second;
+    //   //if b[second key] exists, add second value to its value
+    //   //if not, insert second key with value second value (defaults to 0 then add)
+    //   b[it4->first] = b[it4->first] + it4->second;
+    //   //or use emplace/insert in the boost version??
+    // }
+
     // OLD MERGE CODE.
    
   /*   std::list<idcount>::iterator it1,it2;
@@ -757,6 +777,7 @@ struct edge_sum_gather {
     std::vector<idcount>::const_iterator it;
     for (it = b.begin(); it != b.end(); ++it)
       oarc << *it;
+    // oarc << b;
     oarc << n1 << n2 << n2e << n2c << n3<<n1_double<<n2c_double<<n3_double<<n1_n2cn2e<<n2e_n1n2c<<n1_n2e_p<<n1_n3<<n2c_n3;
   }
 
@@ -769,6 +790,7 @@ struct edge_sum_gather {
         iarc >> element;
         b.push_back(element);
     }
+    // iarc >> b;
     iarc >> n1 >> n2 >> n2e >> n2c >> n3>>n1_double>>n2c_double>>n3_double>>n1_n2cn2e>>n2e_n1n2c>>n1_n2e_p>>n1_n3>>n2c_n3;
   }
 };
@@ -1067,9 +1089,20 @@ public:
             dum.vert_id=targetlist.vid_set.vid_vec.at(i); // assigning the id of the structure to that of the ith neighbor.
             dum.count=1;
             gather.b.push_back(dum);// push it in the list
-          
           } // doing this only for all neighbors of the target thats not the source. 
         }
+
+        // //ETHAN UNORDERED MAP, pass to gather all at once??
+        // for (size_t i=0; i<targetlist.vid_set.vid_vec.size();i++){
+        //   if (targetlist.vid_set.vid_vec.at(i)!= edge.source().id()){
+        //     // boost::unordered_map<graphlab::vertex_id_type,size_t> dum;
+        //     // dum[targetlist.vid_set.vid_vec.at(i)] = 1;
+        //     // gather.b.insert(dum);  //add key and value
+        //     //will this work instead??
+        //     gather.b[targetlist.vid_set.vid_vec.at(i)] = 1;
+        //     // gather.b.insert(std::pair<graphlab::vertex_id_type,size_t>(targetlist.vid_set.vid_vec.at(i),1));
+        //   }
+        // }
 
         gather.n1_n2e_p = edge.data().n1*edge.data().n2e + 
           (context.num_vertices() - edge.source().data().vid_set.size() - 1)*(edge.source().data().vid_set.size() - 1)*
@@ -1099,6 +1132,15 @@ public:
        // std::cout <<"leaving for 2 \n";
         }
 
+        // //ETHAN UNORDERED MAP, pass to gather all at once??
+        // for (size_t i=0; i<srclist.vid_set.vid_vec.size();i++){
+        //   if (srclist.vid_set.vid_vec.at(i)!= edge.target().id()){
+        //    // gather.b.insert({{srclist.vid_set.vid_vec.at(i),1}});  //add key and value
+        //     gather.b[srclist.vid_set.vid_vec.at(i)] = 1;
+        //   // gather.b.insert(std::pair<graphlab::vertex_id_type,size_t>(srclist.vid_set.vid_vec.at(i),1));
+        //   }
+        // }
+
  	      gather.n2c_n3=edge.data().n2e*edge.data().n3;
         gather.n1_n2e_p = edge.data().n1*edge.data().n2c + 
           (context.num_vertices() - srclist.vid_set.size() - 1)*(srclist.vid_set.size() - 1)*
@@ -1106,7 +1148,7 @@ public:
       }
     }
 
-    
+
     else{
       gather.n1 = 0;
       gather.n2 = 0;
@@ -1168,8 +1210,11 @@ public:
      vertex.data().u[9]=0;
      // std::list<idcount> e1=ecounts.b;
      // std::list<idcount>::iterator it;
+     
      std::vector<idcount> e1=ecounts.b;
      std::vector<idcount>::iterator it;
+
+
      for (it=e1.begin();it!=e1.end();++it){
         
        std::vector<graphlab::vertex_id_type> vec1 (1,it->vert_id); // initializing a vector with one id as element.
@@ -1180,6 +1225,22 @@ public:
         }
  
      }
+
+    // //ETHAN UNORDERED MAP
+    // boost::unordered_map<graphlab::vertex_id_type,size_t> e1=ecounts.b;
+    // boost::unordered_map<graphlab::vertex_id_type,size_t>::iterator it;   
+    // for (it=e1.begin();it!=e1.end();++it){
+    // // while (it!=e1.end()) {    
+    //    std::vector<graphlab::vertex_id_type> vec1 (1,it->first); // initializing a vector with one id as element.
+    //    vid_vector dummy; // create a vid_vector out of this vec 1 for uses with count_set_intersect
+    //    dummy.assign(vec1);       
+    //    if (  count_set_intersect(dummy,vertex.data().vid_set)== 0 ){
+    //      vertex.data().u[9]+= (it->second * (it->second - 1))/2; // doing count choose 2 if the id is not the vertex neighbor.
+    //     // std::cout<<" vertex "<< vertex.id() <<" non-neighbor vertex_id "<<it->vert_id<<" count "<<it->count<<std::endl;         
+    //     }
+    //  }
+  
+  
      
   // KARTHIK CHANGE- COMMENTED THe FOLLOWING LINE. I AM NOT SURE WHAT THIS IS DOING. I DO NOT WANT THE NEIGHBORHOOD TO BE ERASED NOW.  
  // vertex.data().vid_set.clear(); //still necessary??    
