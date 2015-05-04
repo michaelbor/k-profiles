@@ -2347,7 +2347,7 @@ clopts.attach_option("prob_step", prob_step,
       total_time = ti.current_time();
       dc.cout() << "Total runtime: " << total_time << "sec." << std::endl;
       std::ofstream myfile;
-      char fname[20];
+      char fname[30];
       sprintf(fname,"counts_4_profilesL.txt");
       bool is_new_file = true;
       if (std::ifstream(fname)){
