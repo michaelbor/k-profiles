@@ -15,6 +15,7 @@ add_graphlab_executable(3profileEgo2_without_sampling 3profileEgo2_without_sampl
 add_graphlab_executable(3profileEgo2subego 3profilesEgo2_egosampling.cpp)
 add_graphlab_executable(3profileEgo2subegofile 3profilesEgo2_egosamplingfile.cpp)
 add_graphlab_executable(4profileV4 4profileV4.cpp)
+add_graphlab_executable(4profileV15 4profileV15.cpp)
  
  
 
